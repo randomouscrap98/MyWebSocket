@@ -10,9 +10,13 @@ namespace WebSocketRunner
    {
       public static void Main(string[] args)
       {
-         WebSocketServer server = new WebSocketServer();
+         BaseClass thing = BaseClass.Maker(() => new DerivedClass());
 
-         if (!server.Start(45695))
+         Console.WriteLine("Thing is a: " + thing.GetType());
+
+         WebSocketServer server = new WebSocketServer(45695);
+
+         if (!server.Start())
          {
             Console.WriteLine("Cannot start server!");
             return;
@@ -27,5 +31,20 @@ namespace WebSocketRunner
             return;
          }
       }
+   }
+
+   class BaseClass
+   {
+      public int someint = 14;
+
+      public static BaseClass Maker(Func<BaseClass> makerFunction)
+      {
+         return makerFunction();
+      }
+   }
+
+   class DerivedClass : BaseClass
+   {
+      public int otherint = 15;
    }
 }
