@@ -11,8 +11,9 @@ namespace MyWebSocket
    public class BasicSpinner
    {
       private Thread spinner = null;
-      protected SpinStatus spinnerStatus = SpinStatus.Initial;
+      protected SpinStatus spinnerStatus = SpinStatus.None;
       protected bool shouldStop = false;
+      protected bool ReportsSpinStatus = false;
 
       public readonly string SpinnerName = "Spinner";
       public readonly int MaxShutdownSeconds;
@@ -50,19 +51,24 @@ namespace MyWebSocket
          //You're already running, you dingus!
          if (Running)
          {
-            Log(SpinnerName + " spinner already running!", LogLevel.Warning);
+            Log(SpinnerName + " already running!", LogLevel.Warning);
             return true;
          }
 
          //Initialize the spin thread and start it up.
+         shouldStop = false;
+         spinnerStatus = SpinStatus.None;
          spinner = new Thread(Spin);
          spinner.Start();
 
+         DateTime start = DateTime.Now;
+
          //Now make sure everything is running smoothly for the spinner!
-         while (spinnerStatus != SpinStatus.Spinning)
+         while (ReportsSpinStatus && spinnerStatus != SpinStatus.Spinning && spinnerStatus != SpinStatus.Complete)
          {
             if (spinnerStatus == SpinStatus.Error)
             {
+               Stop();
                Log(SpinnerName + " failed while starting", LogLevel.Error);
                return false;
             }
@@ -171,6 +177,11 @@ namespace MyWebSocket
       public override void Log(string message, LogLevel level = LogLevel.Normal)
       {
          Server.LogGeneral(message, level, SpinnerName + ID);
+      }
+
+      public void Close()
+      {
+         Client.Close();
       }
 
       private static long GenerateID()

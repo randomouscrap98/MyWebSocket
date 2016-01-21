@@ -12,6 +12,7 @@ namespace MyWebSocket
 
       private int port;
       private List<WebSocketSpinner> connectionSpinners;
+      private readonly object spinnerLock = new object();
       private Logger logger = Logger.DefaultLogger;
       //private bool shouldStop = false;
       //private Thread spinner = null;
@@ -21,6 +22,8 @@ namespace MyWebSocket
       {
          this.port = port;
          connectionSpinners = new List<WebSocketSpinner>();
+         ReportsSpinStatus = true;
+
          //MaxShutdownSeconds = maxSecondsToShutdown;
 
          if (logger != null)
@@ -54,8 +57,7 @@ namespace MyWebSocket
       /// </summary>
       public override void Spin()
       {
-         spinnerStatus = SpinStatus.Initial;
-         shouldStop = false;
+         spinnerStatus = SpinStatus.Starting;
          TcpListener server = new TcpListener(System.Net.IPAddress.Any, port);
 
          try
@@ -77,6 +79,8 @@ namespace MyWebSocket
             //NO! NO BLOCKING! This is basically nonblocking... kind of.
             if (server.Pending())
             {
+               Log("Accepting pending connection", LogLevel.Debug);
+
                //Accept the client and set it up
                TcpClient client = server.AcceptTcpClient();
                client.ReceiveBufferSize = 2048;
@@ -87,13 +91,28 @@ namespace MyWebSocket
                //Start up a spinner to handle this new connection. The spinner will take care of headers and all that,
                //we're just here to intercept new connections.
                WebSocketSpinner newSpinner = new WebSocketSpinner(this, webClient);
-               connectionSpinners.Add(newSpinner);
-               newSpinner.Start();
+
+               if (!newSpinner.Start())
+               {
+                  Log("Couldn't startup client spinner!", LogLevel.Error);
+                  newSpinner.Close();
+               }
+               else
+               {
+                  lock (spinnerLock)
+                  {
+                     connectionSpinners.Add(newSpinner);
+                  }
+
+                  Log("New connection established; spinner started", LogLevel.Debug);
+               }
 
             }
 
             System.Threading.Thread.Sleep(100);
          }
+
+         Log("Attempting to stop server", LogLevel.Debug);
 
          server.Stop();
 

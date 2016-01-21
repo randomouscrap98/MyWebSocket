@@ -3,6 +3,7 @@ using MyWebSocket;
 using System.Net;
 using System.Net.Sockets;
 using System.Threading;
+using MyExtensions.Logging;
 
 namespace WebSocketRunner
 {
@@ -10,11 +11,9 @@ namespace WebSocketRunner
    {
       public static void Main(string[] args)
       {
-         BaseClass thing = BaseClass.Maker(() => new DerivedClass());
+         Logger logger = new Logger(100, "", LogLevel.Debug);
 
-         Console.WriteLine("Thing is a: " + thing.GetType());
-
-         WebSocketServer server = new WebSocketServer(45695);
+         WebSocketServer server = new WebSocketServer(45695, logger);
 
          if (!server.Start())
          {

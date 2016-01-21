@@ -27,7 +27,8 @@ namespace MyWebSocket
    {
       Spinning,
       Complete,
-      Initial,
+      None,
+      Starting,
       Error
    }
 

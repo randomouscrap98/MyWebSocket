@@ -3,29 +3,30 @@ using System.Collections.Generic;
 
 namespace MyWebSocket
 {
-   //public delegate void BroadcastAnnouncer(string message);
-
    public class WebSocketUser
    {
-      //public event BroadcastAnnouncer BroadcastEvent;
       private Func<List<WebSocketUser>> GetAllUsersPlaceholder = null;
       private Action<string> BroadcastPlaceholder = null;
+      private Action<string> SendPlaceholder = null;
 
       public WebSocketUser()
       {
          
       }
 
+      public void SetSendPlaceholder(Action<string> function)
+      {
+         SendPlaceholder = function;
+      }
+
       public void SetGetAllUsersPlaceholder(Func<List<WebSocketUser>> function)
       {
-         if(function != null)
-            GetAllUsersPlaceholder = function;
+         GetAllUsersPlaceholder = function;
       }
 
       public void SetBroadcastPlaceholder(Action<string> function)
       {
-         if(function != null)
-            BroadcastPlaceholder = function;
+         BroadcastPlaceholder = function;
       }
 
       /// <summary>
@@ -36,6 +37,12 @@ namespace MyWebSocket
       {
          if (BroadcastPlaceholder != null)
             BroadcastPlaceholder(message);
+      }
+
+      public void Send(string message)
+      {
+         if (SendPlaceholder != null)
+            SendPlaceholder(message);
       }
 
       public List<WebSocketUser> GetAllUsers()
