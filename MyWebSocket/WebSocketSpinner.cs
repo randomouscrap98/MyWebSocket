@@ -155,14 +155,14 @@ namespace MyWebSocket
    /// A spinner which handles user connections. This is the main class! It's what lets people
    /// talk to each other!
    /// </summary>
-   public class WebSocketSpinner : BasicSpinner
+   public class WebSocketSpinner : BasicSpinner, IDisposable
    {
-      public readonly WebSocketServer Server;
-      public readonly WebSocketClient Client;
-      public readonly WebSocketUser User;
-      public readonly long ID;
-
       //Shhhh, don't look at them!
+      private WebSocketServer Server;
+      private WebSocketClient Client;
+      private WebSocketUser User;
+
+      public readonly long ID;
       private static long NextID = 1;
       private static readonly object idLock = new object();
 
@@ -179,9 +179,21 @@ namespace MyWebSocket
          Server.LogGeneral(message, level, SpinnerName + ID);
       }
 
-      public void Close()
+      /// <summary>
+      /// The only unmanaged resource here is the client, so get rid of them.
+      /// </summary>
+      /// <remarks>Call <see cref="Dispose"/> when you are finished using the <see cref="MyWebSocket.WebSocketSpinner"/>. The
+      /// <see cref="Dispose"/> method leaves the <see cref="MyWebSocket.WebSocketSpinner"/> in an unusable state. After
+      /// calling <see cref="Dispose"/>, you must release all references to the
+      /// <see cref="MyWebSocket.WebSocketSpinner"/> so the garbage collector can reclaim the memory that the
+      /// <see cref="MyWebSocket.WebSocketSpinner"/> was occupying.</remarks>
+      public void Dispose()
       {
-         Client.Close();
+         if (Client != null)
+         {
+            Client.Dispose();
+            Client = null;
+         }
       }
 
       private static long GenerateID()

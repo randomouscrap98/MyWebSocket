@@ -29,14 +29,14 @@ namespace MyWebSocket
    /// Represents a client connected over websockets. Main class of websocket library: controls
    /// messages sent and received on the websocket, including the HTTP handshake.
    /// </summary>
-   public class WebSocketClient
+   public class WebSocketClient : IDisposable
    {
-      public readonly TcpClient Client;
       public readonly int MaxReceiveSize;
 
       public readonly Object outputLock = new object();
       private Queue<Tuple<string, System.Text.Encoding>> outputBuffer = new Queue<Tuple<string, System.Text.Encoding>>();
 
+      private TcpClient Client;
       private NetworkStream stream;
       private byte[] messageBuffer;
       //private byte[] fragmentBuffer;
@@ -59,10 +59,26 @@ namespace MyWebSocket
          //fragmentBuffer = new byte[MaxReceiveSize];
       }
 
-      public void Close()
+      /// <summary>
+      /// We have both a TcpListener and a stream that need to be disposed of.
+      /// </summary>
+      /// <remarks>Call <see cref="Dispose"/> when you are finished using the <see cref="MyWebSocket.WebSocketClient"/>. The
+      /// <see cref="Dispose"/> method leaves the <see cref="MyWebSocket.WebSocketClient"/> in an unusable state. After
+      /// calling <see cref="Dispose"/>, you must release all references to the
+      /// <see cref="MyWebSocket.WebSocketClient"/> so the garbage collector can reclaim the memory that the
+      /// <see cref="MyWebSocket.WebSocketClient"/> was occupying.</remarks>
+      public void Dispose()
       {
-         stream.Close();
-         Client.Close();
+         if (stream != null)
+         {
+            stream.Dispose();
+            stream = null;
+         }
+         if (Client != null)
+         {
+            Client.Close();
+            Client = null;
+         }
       }
 
       /// <summary>

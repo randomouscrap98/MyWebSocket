@@ -6,17 +6,13 @@ using System.Threading;
 
 namespace MyWebSocket
 {
-   public class WebSocketServer : BasicSpinner
+   public class WebSocketServer : BasicSpinner, IDisposable
    {
-      //public readonly int MaxShutdownSeconds;
-
       private int port;
       private List<WebSocketSpinner> connectionSpinners;
       private readonly object spinnerLock = new object();
       private Logger logger = Logger.DefaultLogger;
-      //private bool shouldStop = false;
-      //private Thread spinner = null;
-      //private SpinStatus spinnerStatus = SpinStatus.Initial;
+      private System.Timers.Timer cleanupTimer = new System.Timers.Timer();
 
       public WebSocketServer(int port, Logger logger = null, int maxSecondsToShutdown = 5) : base("WebSocket Server", maxSecondsToShutdown)
       {
@@ -25,9 +21,15 @@ namespace MyWebSocket
          ReportsSpinStatus = true;
 
          //MaxShutdownSeconds = maxSecondsToShutdown;
+         cleanupTimer.Interval = TimeSpan.FromSeconds(5).TotalMilliseconds;
 
          if (logger != null)
             this.logger = logger;
+      }
+
+      public void Dispose()
+      {
+         cleanupTimer.Dispose();
       }
 
       /// <summary>
@@ -95,7 +97,7 @@ namespace MyWebSocket
                if (!newSpinner.Start())
                {
                   Log("Couldn't startup client spinner!", LogLevel.Error);
-                  newSpinner.Close();
+                  newSpinner.Dispose();
                }
                else
                {
