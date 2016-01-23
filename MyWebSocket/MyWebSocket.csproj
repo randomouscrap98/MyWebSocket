@@ -42,6 +42,7 @@
     <Compile Include="WebSocketServer.cs" />
     <Compile Include="WebSocketSpinner.cs" />
     <Compile Include="WebSocketUser.cs" />
+    <Compile Include="BasicSpinner.cs" />
   </ItemGroup>
   <Import Project="$(MSBuildBinPath)\Microsoft.CSharp.targets" />
 </Project>

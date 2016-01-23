@@ -1,6 +1,8 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Net.NetworkInformation;
+using System.Net.Sockets;
 
 namespace MyWebSocket
 {
@@ -51,13 +53,21 @@ namespace MyWebSocket
          int result = 0;
          int multiplier = 1;
 
-         for (int i = 0; i < array.Count(); i++)
+         for (int i = Math.Min(array.Count(), sizeof(int)) - 1; i >= 0; i--)
          {
             result += multiplier * array.ElementAt(i);
             multiplier *= 256;
          }
 
          return result;
+      }
+
+      public static TcpState GetState(this TcpClient tcpClient)
+      {
+         var foo = IPGlobalProperties.GetIPGlobalProperties()
+            .GetActiveTcpConnections()
+            .SingleOrDefault(x => x.LocalEndPoint.Equals(tcpClient.Client.LocalEndPoint));
+         return foo != null ? foo.State : TcpState.Unknown;
       }
    }
 }

@@ -11,9 +11,9 @@ namespace WebSocketRunner
    {
       public static void Main(string[] args)
       {
-         Logger logger = new Logger(100, "", LogLevel.Debug);
+         Logger logger = new Logger(100, "", LogLevel.SuperDebug);
 
-         WebSocketServer server = new WebSocketServer(45695, logger);
+         WebSocketServer server = new WebSocketServer(45695, "chat", () => { return new EchoUser(); }, logger);
 
          if (!server.Start())
          {
@@ -32,18 +32,14 @@ namespace WebSocketRunner
       }
    }
 
-   class BaseClass
+   public class EchoUser : WebSocketUser
    {
-      public int someint = 14;
-
-      public static BaseClass Maker(Func<BaseClass> makerFunction)
+      public override void ReceivedMessage(string message)
       {
-         return makerFunction();
-      }
-   }
+         Send("I got: " + message);
 
-   class DerivedClass : BaseClass
-   {
-      public int otherint = 15;
+         if (message.Contains("broadcast"))
+            Broadcast("Broadcast: " + message);
+      }
    }
 }

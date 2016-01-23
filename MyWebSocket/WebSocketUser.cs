@@ -45,6 +45,16 @@ namespace MyWebSocket
             SendPlaceholder(message);
       }
 
+      /// <summary>
+      /// This function is called when the websocket receives a message. Override this function
+      /// to perform actions on received messages.
+      /// </summary>
+      /// <param name="message">Message.</param>
+      public virtual void ReceivedMessage(string message)
+      {
+
+      }
+
       public List<WebSocketUser> GetAllUsers()
       {
          if (GetAllUsersPlaceholder != null)

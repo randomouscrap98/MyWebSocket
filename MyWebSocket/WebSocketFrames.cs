@@ -1,8 +1,12 @@
 ﻿using System;
 using System.Linq;
+using System.Collections.Generic;
 
 namespace MyWebSocket
 {
+   /// <summary>
+   /// All possible frame opcodes for a WebSocket Header
+   /// </summary>
    public enum HeaderOpcode
    {
       ContinueFrame = 0x0,
@@ -32,7 +36,6 @@ namespace MyWebSocket
       public bool Masked = false;
       public int RSV = 0;
       public int PayloadSize = 0;
-      public int HeaderSize = 0;
 
       private int OpcodeRaw = 0;
 
@@ -40,6 +43,28 @@ namespace MyWebSocket
 
       public WebSocketHeader()
       {
+      }
+
+      /// <summary>
+      /// Gets the size of the header computed from mask and payload size.
+      /// </summary>
+      /// <value>The size of the header.</value>
+      public int HeaderSize
+      {
+         get
+         {
+            int size = 2;
+
+            if (Masked)
+               size += 4;
+
+            if (PayloadIdentifier == 126)
+               size += 2;
+            else if (PayloadIdentifier == 127)
+               size += 8;
+
+            return size;
+         }
       }
 
       public int FrameSize
@@ -50,6 +75,60 @@ namespace MyWebSocket
       public HeaderOpcode Opcode
       {
          get { return (HeaderOpcode)OpcodeRaw; }
+         set { OpcodeRaw = (int)value; }
+      }
+
+      /// <summary>
+      /// Get the 7 bit payload value that goes in the header (not necessarily the full payload size)
+      /// </summary>
+      /// <value>The payload identifier.</value>
+      public int PayloadIdentifier
+      {
+         get
+         {
+            if (PayloadSize < 126)
+               return PayloadSize;
+            else if (PayloadSize < 65536)
+               return 126;
+            else
+               return 127;
+         }
+      }
+
+      /// <summary>
+      /// Get head as bytes (for use in transmitting)
+      /// </summary>
+      /// <returns>The raw bytes.</returns>
+      public byte[] GetRawBytes()
+      {
+         List<byte> bytes = new List<byte>();
+
+         //First two bytes are always the same fields.
+         bytes.Add((byte)(((Fin ? 1 : 0) << 7) + (RSV << 4) + OpcodeRaw));
+         bytes.Add((byte)(((Masked ? 1 : 0) << 7) + PayloadIdentifier));
+
+         //Payload length field size changes based on the length. 
+         List<byte> payloadSizeBytes = BitConverter.GetBytes(PayloadSize).ToList();
+
+         //Bytes are only transmitted across the line in big endian
+         if (BitConverter.IsLittleEndian)
+            payloadSizeBytes.Reverse();
+
+         //We store payload length as an int, but on the line it COULD be up to a long (8 bytes).
+         payloadSizeBytes.InsertRange(0, new List<byte>(){0,0,0,0});
+
+         //If the identifier is 126, the size is the next two bytes. Take the last two bytes
+         if (PayloadIdentifier == 126)
+            bytes.AddRange(payloadSizeBytes.Skip(6));
+         //If the identifier is 127, the size is the next eight bytes. Take them all.
+         else if (PayloadIdentifier == 127)
+            bytes.AddRange(payloadSizeBytes);
+
+         //Add mask field only if we're masking.
+         if (Masked)
+            bytes.AddRange(Mask);
+
+         return bytes.ToArray();
       }
 
       /// <summary>
@@ -62,9 +141,9 @@ namespace MyWebSocket
       public static bool TryParse(byte[] bytes, out WebSocketHeader result)
       {
          result = new WebSocketHeader();
-         result.HeaderSize = FullHeaderSize(bytes);
+         int headerSize = FullHeaderSize(bytes);
 
-         if (result.HeaderSize > bytes.Length)
+         if (headerSize > bytes.Length)
             return false;
 
          //First byte encoding
@@ -86,8 +165,8 @@ namespace MyWebSocket
          }
          else if (result.PayloadSize == 127)
          {
-            result.PayloadSize = bytes.Skip(2).Take(4).ParseInt();
-            maskByte += 4;
+            result.PayloadSize = bytes.Skip(2).Take(8).ParseInt();
+            maskByte += 8;
          }
 
          //Get all the bytes of the mask
@@ -120,7 +199,7 @@ namespace MyWebSocket
             size += 2;
          //When the payload size is max, use 4 bytes to state the payload size.
          else if ((bytes[1] & ~128) == 127)
-            size += 4;
+            size += 8;
 
          return size;
       }
@@ -158,6 +237,12 @@ namespace MyWebSocket
             PayloadData = new byte[1];
 
          //Now let's just unmask the data and finally get the hell outta dodge.
+         if (Header.Masked)
+            ToggleMask();
+      }
+
+      private void ToggleMask()
+      {
          for (int i = 0; i < Header.PayloadSize; i++)
             PayloadData[i] ^= Header.Mask[i % 4];
       }
@@ -180,14 +265,32 @@ namespace MyWebSocket
       /// <value>The data as string.</value>
       public string DataAsString
       {
-         get { return System.Text.Encoding.UTF8.GetString(PayloadData, 0, Header.PayloadSize); }
+         get { return System.Text.Encoding.UTF8.GetString(PayloadData, 0, (int)Header.PayloadSize); }
+      }
+
+      public byte[] GetRawBytes()
+      {
+         List<byte> bytes = Header.GetRawBytes().ToList();
+
+         if (Header.Masked)
+         {
+            ToggleMask();
+            bytes.AddRange(PayloadData);
+            ToggleMask();
+         }
+         else
+         {
+            bytes.AddRange(PayloadData);
+         }
+
+         return bytes.ToArray();
       }
 
       /// <summary>
       /// Get the size of the current frame (header + payload)
       /// </summary>
       /// <value>The size of the frame.</value>
-      public int FrameSize
+      public long FrameSize
       {
          get { return Header.FrameSize; }
       }
@@ -229,6 +332,52 @@ namespace MyWebSocket
             else
                return CloseStatus.BadStatus;
          }
+      }
+
+      /// <summary>
+      /// Generate a websocket frame for the given text payload
+      /// </summary>
+      /// <returns>The text frame.</returns>
+      /// <param name="payload">Payload.</param>
+      public static WebSocketFrame GetTextFrame(byte[] payload)
+      {
+         WebSocketHeader header = new WebSocketHeader();
+         header.Fin = true;
+         header.Masked = false;
+         header.Opcode = HeaderOpcode.TextFrame;
+         header.PayloadSize = payload.Length;
+
+         return new WebSocketFrame(header, payload);
+      }
+
+      /// <summary>
+      /// Get a whole standard ping frame, completely built.
+      /// </summary>
+      /// <returns>The ping frame.</returns>
+      public static WebSocketFrame GetPingFrame()
+      {
+         WebSocketHeader header = new WebSocketHeader();
+         header.Fin = true;
+         header.Masked = false;
+         header.Opcode = HeaderOpcode.PingFrame;
+         header.PayloadSize = 0;
+
+         return new WebSocketFrame(header, new byte[0]);
+      }
+
+      /// <summary>
+      /// Get a whole standard pong frame, completely built.
+      /// </summary>
+      /// <returns>The pong frame.</returns>
+      public static WebSocketFrame GetPongFrame()
+      {
+         WebSocketHeader header = new WebSocketHeader();
+         header.Fin = true;
+         header.Masked = false;
+         header.Opcode = HeaderOpcode.PongFrame;
+         header.PayloadSize = 0;
+
+         return new WebSocketFrame(header, new byte[0]);
       }
    }
 }

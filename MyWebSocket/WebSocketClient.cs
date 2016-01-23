@@ -34,14 +34,13 @@ namespace MyWebSocket
       public readonly int MaxReceiveSize;
 
       public readonly Object outputLock = new object();
-      private Queue<Tuple<string, System.Text.Encoding>> outputBuffer = new Queue<Tuple<string, System.Text.Encoding>>();
+      private Queue<byte[]> outputBuffer = new Queue<byte[]>();
+      //private Queue<Tuple<string, System.Text.Encoding>> outputBuffer = new Queue<Tuple<string, System.Text.Encoding>>();
 
       private TcpClient Client;
       private NetworkStream stream;
       private byte[] messageBuffer;
-      //private byte[] fragmentBuffer;
       private int messageBufferSize = 0;
-      //private int fragmentBufferSize = 0;
       private HTTPClientHandshake parsedHandshake = null;
 
       public bool HandShakeComplete
@@ -79,6 +78,11 @@ namespace MyWebSocket
             Client.Close();
             Client = null;
          }
+      }
+
+      public bool Connected
+      {
+         get { return Client.GetState() == System.Net.NetworkInformation.TcpState.Established; }
       }
 
       /// <summary>
@@ -165,7 +169,10 @@ namespace MyWebSocket
          
          //Too much data
          if (header.FrameSize > MaxReceiveSize)
+         {
+            Console.WriteLine("Oversized frame: " + header.FrameSize + " bytes (max: " + MaxReceiveSize + ")");
             return DataStatus.OversizeError;
+         }
          
          //We have the whole header, but do we have the whole message? if not, we're still waiting on data.
          if (messageBufferSize < header.FrameSize)
@@ -188,25 +195,6 @@ namespace MyWebSocket
          messageBufferSize -= header.FrameSize;
 
          return DataStatus.Complete;
-
-         //Dump data into fragment buffer if this is a message frame.
-//         if (header.Opcode == HeaderOpcode.ContinueFrame || header.Opcode == HeaderOpcode.TextFrame)
-//         {
-//            Array.Copy(frame.PayloadData, 0, fragmentBuffer, fragmentBufferSize, header.PayloadSize);
-//            fragmentBufferSize += header.PayloadSize;
-//         }
-
-         //Only convert fragment buffer into message if this is the final frame
-//         if (header.Fin)
-//         {
-//            message = System.Text.Encoding.UTF8.GetString(fragmentBuffer, 0, fragmentBufferSize);
-//            fragmentBufferSize = 0;
-//
-//            messageBuffer.TruncateBeginning(header.FrameSize);
-//            messageBufferSize -= header.FrameSize;
-//
-//            return DataStatus.Complete;
-//         }
       }
 
       /// <summary>
@@ -264,9 +252,9 @@ namespace MyWebSocket
       /// Handshakes are a bit special, so use this to enqueue them.
       /// </summary>
       /// <param name="handshake">Handshake.</param>
-      public void QueueHandshakeWrite(HTTPServerHandshake handshake)
+      public void QueueHandshakeMessage(HTTPServerHandshake handshake)
       {
-         QueueWrite(handshake.ToString(), System.Text.Encoding.ASCII);
+         QueueMessage(handshake.ToString(), System.Text.Encoding.ASCII);
       }
 
       /// <summary>
@@ -274,14 +262,25 @@ namespace MyWebSocket
       /// </summary>
       /// <param name="message">Message.</param>
       /// <param name="encoding">Encoding.</param>
-      public void QueueWrite(string message, System.Text.Encoding encoding = null)
+      public void QueueMessage(string message, System.Text.Encoding encoding = null)
       {
          if (encoding == null)
             encoding = System.Text.Encoding.UTF8;
-         
+
+         byte[] bytes = encoding.GetBytes(message);
+
+         QueueRaw(WebSocketFrame.GetTextFrame(bytes).GetRawBytes());
+      }
+
+      /// <summary>
+      /// Queue some raw data on the write queue (useful for frame queuing)
+      /// </summary>
+      /// <param name="bytes">Bytes.</param>
+      public void QueueRaw(byte[] bytes)
+      {
          lock (outputLock)
          {
-            outputBuffer.Enqueue(Tuple.Create(message, encoding));
+            outputBuffer.Enqueue(bytes);
          }
       }
 
@@ -290,17 +289,19 @@ namespace MyWebSocket
       /// </summary>
       public DataStatus DequeueWrite()
       {
-         Tuple<string, System.Text.Encoding> output = null;
+         byte[] bytes = null;
 
          lock (outputLock)
          {
-            output = outputBuffer.Dequeue();
+            if (outputBuffer.Count == 0)
+               return DataStatus.WaitingOnData;
+            
+            bytes = outputBuffer.Dequeue();
          }
 
          //In the future, this section may be extracted to a threadpool
          try
          {
-            byte[] bytes = output.Item2.GetBytes(output.Item1);
             stream.Write(bytes, 0, bytes.Length);
             return DataStatus.Complete;
          }
@@ -315,6 +316,28 @@ namespace MyWebSocket
             else
                return DataStatus.UnknownError;
          }
+      }
+
+      /// <summary>
+      /// Attempt flush out the entire write queue in the given amount of time.
+      /// </summary>
+      /// <param name="timeout">Timeout.</param>
+      public void DumpWriteQueue(TimeSpan timeout)
+      {
+         int oldTimeout = Client.SendTimeout;
+         int oldStreamTimeout = stream.WriteTimeout;
+         Client.SendTimeout = (int)timeout.TotalMilliseconds;
+         stream.WriteTimeout = (int)timeout.TotalMilliseconds;
+
+         DataStatus status = DataStatus.UnknownError;
+
+         do
+         {
+            status = DequeueWrite();
+         } while(status == DataStatus.Complete);
+
+         Client.SendTimeout = oldTimeout;
+         stream.WriteTimeout = oldStreamTimeout;
       }
    }
 }

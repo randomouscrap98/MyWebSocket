@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Net.Sockets;
 using MyExtensions.Logging;
 using System.Threading;
+using System.Linq;
 
 namespace MyWebSocket
 {
@@ -14,11 +15,17 @@ namespace MyWebSocket
       private Logger logger = Logger.DefaultLogger;
       private System.Timers.Timer cleanupTimer = new System.Timers.Timer();
 
-      public WebSocketServer(int port, Logger logger = null, int maxSecondsToShutdown = 5) : base("WebSocket Server", maxSecondsToShutdown)
+      public readonly string Service;
+      public readonly Func<WebSocketUser> GenerateWebSocketUser;
+
+      public WebSocketServer(int port, string service, Func<WebSocketUser> howToCreate,
+         Logger logger = null, int maxSecondsToShutdown = 5) : base("WebSocket Server", maxSecondsToShutdown)
       {
          this.port = port;
          connectionSpinners = new List<WebSocketSpinner>();
          ReportsSpinStatus = true;
+         Service = service;
+         GenerateWebSocketUser = howToCreate;
 
          //MaxShutdownSeconds = maxSecondsToShutdown;
          cleanupTimer.Interval = TimeSpan.FromSeconds(5).TotalMilliseconds;
@@ -30,6 +37,14 @@ namespace MyWebSocket
       public void Dispose()
       {
          cleanupTimer.Dispose();
+      }
+
+      public List<WebSocketUser> ConnectedUsers()
+      {
+         lock(spinnerLock)
+         {
+            return connectionSpinners.Select(x => x.User).ToList();
+         }
       }
 
       /// <summary>
@@ -55,9 +70,39 @@ namespace MyWebSocket
       }
 
       /// <summary>
+      /// Completely obliterate a spinner. It will just no longer exist. Use this when
+      /// you need absolute destruction.
+      /// </summary>
+      /// <param name="spinner">Spinner.</param>
+      private void ObliterateSpinner(WebSocketSpinner spinner)
+      {
+         Log("Forcefully obliterating spinner: " + spinner.ID, LogLevel.Debug);
+         spinner.Stop();
+         RemoveSpinner(spinner);
+      }
+
+      /// <summary>
+      /// Remove and cleanup the given spinner
+      /// </summary>
+      /// <param name="spinner">Spinner.</param>
+      private void RemoveSpinner(BasicSpinner baseSpinner)
+      {
+         WebSocketSpinner spinner = (WebSocketSpinner)baseSpinner;
+
+         lock (spinnerLock)
+         {
+            if(connectionSpinners.Remove(spinner))
+               Log("Removed spinner: " + spinner.ID, LogLevel.Debug);
+         }
+
+         spinner.OnComplete -= RemoveSpinner;
+         spinner.Dispose();
+      }
+
+      /// <summary>
       /// The worker function which should be run on a thread. It accepts connections
       /// </summary>
-      public override void Spin()
+      protected override void Spin()
       {
          spinnerStatus = SpinStatus.Starting;
          TcpListener server = new TcpListener(System.Net.IPAddress.Any, port);
@@ -87,17 +132,18 @@ namespace MyWebSocket
                TcpClient client = server.AcceptTcpClient();
                client.ReceiveBufferSize = 2048;
                client.SendBufferSize = 16384;
-               client.SendTimeout = client.ReceiveTimeout = 20000;
+               client.SendTimeout = client.ReceiveTimeout = 10000;
                WebSocketClient webClient = new WebSocketClient(client);
 
                //Start up a spinner to handle this new connection. The spinner will take care of headers and all that,
                //we're just here to intercept new connections.
                WebSocketSpinner newSpinner = new WebSocketSpinner(this, webClient);
+               newSpinner.OnComplete += RemoveSpinner;
 
                if (!newSpinner.Start())
                {
                   Log("Couldn't startup client spinner!", LogLevel.Error);
-                  newSpinner.Dispose();
+                  ObliterateSpinner(newSpinner);
                }
                else
                {
@@ -106,7 +152,7 @@ namespace MyWebSocket
                      connectionSpinners.Add(newSpinner);
                   }
 
-                  Log("New connection established; spinner started", LogLevel.Debug);
+                  Log("Accepted connection from " + client.Client.RemoteEndPoint);
                }
 
             }
@@ -117,6 +163,9 @@ namespace MyWebSocket
          Log("Attempting to stop server", LogLevel.Debug);
 
          server.Stop();
+
+         foreach (WebSocketSpinner spinner in new List<WebSocketSpinner>(connectionSpinners))
+            ObliterateSpinner(spinner);
 
          Log("Server shut down");
          spinnerStatus = SpinStatus.Complete;

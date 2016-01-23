@@ -1,154 +1,14 @@
 ﻿using System;
 using MyExtensions.Logging;
 using System.Threading;
+using System.Collections.Generic;
 
 namespace MyWebSocket
 {
-   /// <summary>
-   /// A basic object which allows a task start on a separate thread. Wraps whatever
-   /// implementation may be used underneath (currently threads, but could be tasks in the future)
-   /// </summary>
-   public class BasicSpinner
+   public enum WebSocketState
    {
-      private Thread spinner = null;
-      protected SpinStatus spinnerStatus = SpinStatus.None;
-      protected bool shouldStop = false;
-      protected bool ReportsSpinStatus = false;
-
-      public readonly string SpinnerName = "Spinner";
-      public readonly int MaxShutdownSeconds;
-
-      public BasicSpinner(string name, int maxSecondsToShutdown = 5)
-      {
-         SpinnerName = name;
-         MaxShutdownSeconds = maxSecondsToShutdown;
-      }
-
-      /// <summary>
-      /// Write a message to the screen using the log system.
-      /// Logging only dumps to the default logger! Override this to dump to your own!
-      /// </summary>
-      /// <param name="message">Message to log</param>
-      /// <param name="level">Level of message</param>
-      public virtual void Log(string message, LogLevel level = LogLevel.Normal)
-      {
-         Logger.DefaultLogger.LogGeneral(message, level, SpinnerName);
-      }
-
-      /// <summary>
-      /// The work which the spinner will do. Override this to do actual work.
-      /// </summary>
-      public virtual void Spin()
-      {
-         Log("Did some fake work (override Spin to do real work)");
-      }
-
-      /// <summary>
-      /// Attempt to start the spinner. Will return false if something went wrong.
-      /// </summary>
-      public bool Start()
-      {
-         //You're already running, you dingus!
-         if (Running)
-         {
-            Log(SpinnerName + " already running!", LogLevel.Warning);
-            return true;
-         }
-
-         //Initialize the spin thread and start it up.
-         shouldStop = false;
-         spinnerStatus = SpinStatus.None;
-         spinner = new Thread(Spin);
-         spinner.Start();
-
-         DateTime start = DateTime.Now;
-
-         //Now make sure everything is running smoothly for the spinner!
-         while (ReportsSpinStatus && spinnerStatus != SpinStatus.Spinning && spinnerStatus != SpinStatus.Complete)
-         {
-            if (spinnerStatus == SpinStatus.Error)
-            {
-               Stop();
-               Log(SpinnerName + " failed while starting", LogLevel.Error);
-               return false;
-            }
-
-            Thread.Sleep(100);
-         }
-
-         Log(SpinnerName + " started successfully", LogLevel.Debug);
-
-         //It must've gone smoothly because the spinner is spinning.
-         return true;
-      }
-
-      /// <summary>
-      /// A reliable way to determine if the spinner is running.
-      /// </summary>
-      /// <value><c>true</c> if running; otherwise, <c>false</c>.</value>
-      public bool Running
-      {
-         get { return spinner != null && spinner.IsAlive; }
-      }
-
-      /// <summary>
-      /// Attempt to stop the spinner. If it's hanging, it'll kill the thread forcefully
-      /// </summary>
-      public bool Stop()
-      {
-         //Oh, we've already stopped
-         if (!Running)
-            return true;
-
-         //Signal a stop
-         shouldStop = true;
-
-         //Now see if the spinner stopped itself
-         if (!WaitOnSpinStop())
-         {
-            //Oh jeez, it won't stop! Let's keep trying...
-            Log(SpinnerName + " didn't stop when asked. Aborting now...", LogLevel.Error);
-
-            try
-            {
-               spinner.Abort();
-
-               //Oh god, it just won't stop!
-               if(!WaitOnSpinStop())
-                  Log(SpinnerName + " couldn't be aborted!", LogLevel.Error);
-            }
-            catch (Exception e)
-            {
-               Log(SpinnerName + " failed while aborting: " + e.Message);
-            }
-         }
-
-         //If we were fine, get rid of the thread. Otherwise tell the caller the bad news...
-         if (!Running)
-         {
-            Log(SpinnerName + " stopped successfully", LogLevel.Debug);
-            spinner = null;
-            return true;
-         }
-         else
-         {
-            return false;
-         }
-      }
-
-      /// <summary>
-      /// Waits for the spinner to shutdown for the maximum amount of time given in the server constructor.
-      /// </summary>
-      /// <returns><c>true</c>, if spinner stopped, <c>false</c> otherwise.</returns>
-      private bool WaitOnSpinStop()
-      {
-         DateTime start = DateTime.Now;
-
-         while (Running && (DateTime.Now - start) < TimeSpan.FromSeconds(MaxShutdownSeconds))
-            Thread.Sleep(100);
-
-         return !Running;
-      }
+      Startup,
+      Connected
    }
 
    /// <summary>
@@ -160,7 +20,12 @@ namespace MyWebSocket
       //Shhhh, don't look at them!
       private WebSocketServer Server;
       private WebSocketClient Client;
-      private WebSocketUser User;
+      private WebSocketState internalState;
+
+      public readonly WebSocketUser User;
+
+      private byte[] fragmentBuffer;
+      private int fragmentBufferSize = 0;
 
       public readonly long ID;
       private static long NextID = 1;
@@ -170,8 +35,24 @@ namespace MyWebSocket
       {
          Client = supportingClient;
          Server = managingServer;
-         User = new WebSocketUser();
          ID = GenerateID();
+
+         User = Server.GenerateWebSocketUser();
+         User.SetSendPlaceholder((message) =>
+         {
+            Client.QueueMessage(message);
+         });
+         User.SetGetAllUsersPlaceholder(() =>
+         {
+            return Server.ConnectedUsers();
+         });
+         User.SetBroadcastPlaceholder((message) =>
+         {
+            foreach(WebSocketUser user in Server.ConnectedUsers())
+               user.Send(message);
+         });
+
+         fragmentBuffer = new byte[Client.MaxReceiveSize];
       }
 
       public override void Log(string message, LogLevel level = LogLevel.Normal)
@@ -194,6 +75,156 @@ namespace MyWebSocket
             Client.Dispose();
             Client = null;
          }
+      }
+
+      public void LogStatus(DataStatus status, string caller)
+      {
+         Action<string, LogLevel> Slog = (message, level) =>
+         {
+            Log(caller + ": " + message, level);
+         };
+
+         if (status == DataStatus.ClosedSocketError)
+            Slog("Client endpoint closed socket", LogLevel.Warning);
+         else if (status == DataStatus.ClosedStreamError)
+            Slog("Stream closed by itself", LogLevel.Warning);
+         else if (status == DataStatus.DataFormatError)
+            Slog("Data was in an unrecognized format!", LogLevel.Warning);
+         else if (status == DataStatus.EndOfStream)
+            Slog("Somehow, the end of the stream data was reached", LogLevel.Warning);
+         else if (status == DataStatus.InternalError)
+            Slog("Something broke within the WebSocket library!", LogLevel.Error);
+         else if (status == DataStatus.OversizeError)
+            Slog("Data too large; not accepting", LogLevel.Warning);
+         else if (status == DataStatus.SocketExceptionError)
+            Slog("The socket encountered an exception", LogLevel.Error);
+         else if (status == DataStatus.UnknownError)
+            Slog("An unknown error occurred in the WebSocket library!", LogLevel.Error);
+         else if (status == DataStatus.UnsupportedError)
+            Slog("Tried to use an unsupported WebSocket feature!", LogLevel.Warning);
+      }
+
+      protected override void Spin()
+      {
+         string error = "";
+         DataStatus dataStatus;
+         WebSocketFrame readFrame;
+         internalState = WebSocketState.Startup;
+         DateTime lastTest = DateTime.Now;
+
+         while (!shouldStop)
+         {
+            if ((DateTime.Now - lastTest).TotalSeconds > 1)
+            {
+               Client.QueueRaw(WebSocketFrame.GetPingFrame().GetRawBytes());
+               lastTest = DateTime.Now;
+            }
+
+            //In the beginning, we wait for a handshake dawg.
+            if (internalState == WebSocketState.Startup)
+            {
+               HTTPClientHandshake readHandshake;
+               dataStatus = Client.TryReadHandshake(out readHandshake, out error);
+
+               //Wow, we got a real thing! Let's see if the header is what we need!
+               if (dataStatus == DataStatus.Complete)
+               {
+                  if (readHandshake.Service != Server.Service)
+                  {
+                     Client.QueueHandshakeMessage(HTTPServerHandshake.GetBadRequest());
+                     break;
+                  }
+
+                  //Generate a responding handshake, but strip all extensions and protocols.
+                  HTTPServerHandshake response = HTTPServerHandshake.GetResponseForClientHandshake(readHandshake);
+                  response.AcceptedProtocols.Clear();
+                  response.AcceptedExtensions.Clear();
+
+                  Client.QueueHandshakeMessage(response);
+                  internalState = WebSocketState.Connected;
+                  Log("WebSocket handshake complete", LogLevel.Debug);
+
+               }
+               //Hmm, if it's not complete and we're not waiting, it's an error. Close the connection?
+               else if (dataStatus != DataStatus.WaitingOnData)
+               {
+                  LogStatus(dataStatus, "Handshake");
+
+                  if (!string.IsNullOrWhiteSpace(error))
+                     Log("Extra handshake error information: " + error);
+
+                  //Oohhh it was the CLIENT trying to make us do something we don't like! OK then,
+                  //let's tell them why they suck!
+                  if (dataStatus == DataStatus.DataFormatError)
+                     Client.QueueHandshakeMessage(HTTPServerHandshake.GetBadRequest());
+
+                  break;
+               }
+            }
+            else if (internalState == WebSocketState.Connected)
+            {
+               dataStatus = Client.TryReadFrame(out readFrame);
+
+               //Ah, we got a full frame from the client! Let's see what it is
+               if (dataStatus == DataStatus.Complete)
+               {
+                  //If it's a message frame or PART of a message frame, we should add the payload to the 
+                  //fragment buffer. The fragment buffer will be complete if this is a fin frame (see next statement)
+                  if (readFrame.Header.Opcode == HeaderOpcode.ContinueFrame || 
+                      readFrame.Header.Opcode == HeaderOpcode.TextFrame)
+                  {
+                     if (readFrame.Header.Opcode == HeaderOpcode.ContinueFrame)
+                        Log("Received fragmented frame.", LogLevel.SuperDebug);
+                     
+                     Array.Copy(readFrame.PayloadData, 0, fragmentBuffer, fragmentBufferSize, readFrame.Header.PayloadSize);
+                     fragmentBufferSize += readFrame.Header.PayloadSize;
+                  }
+
+                  //Only convert fragment buffer into message if this is the final frame and it's a text frame
+                  if (readFrame.Header.Fin && readFrame.Header.Opcode == HeaderOpcode.TextFrame)
+                  {
+                     string message = System.Text.Encoding.UTF8.GetString(fragmentBuffer, 0, fragmentBufferSize);
+                     fragmentBufferSize = 0;
+         
+                     Log("Received message: " + message, LogLevel.SuperDebug);
+                     User.ReceivedMessage(message);
+                  }
+                  //If user is pinging us, pong them back
+                  else if (readFrame.Header.Opcode == HeaderOpcode.PingFrame)
+                  {
+                     Log("Client ping. Sending pong", LogLevel.SuperDebug);
+                     Client.QueueRaw(WebSocketFrame.GetPongFrame().GetRawBytes());
+                  }
+                  //Oh they're disconnecting? OK then, we need to finish up. Do NOT send more data.
+                  else if (readFrame.Header.Opcode == HeaderOpcode.CloseConnectionFrame)
+                  {
+                     Log("Client is disconnecting: " + readFrame.CloseCode, LogLevel.Debug);
+                     Client.QueueRaw(readFrame.GetRawBytes());
+                     break;
+                  }
+               }
+               //Oh something went wrong. That's OK I guess.
+               else if (dataStatus != DataStatus.WaitingOnData)
+               {
+                  LogStatus(dataStatus, "Read");
+                  break;
+               }
+            }
+
+            dataStatus = Client.DequeueWrite();
+
+            if (dataStatus != DataStatus.Complete && dataStatus != DataStatus.WaitingOnData)
+            {
+               LogStatus(dataStatus, "Write");
+               break;
+            }
+
+            Thread.Sleep(100);
+         }
+
+         //Now that we're ending, try to dump out a bit of the write queue.
+         Log("Connection spinner finished. Dumping write queue", LogLevel.Debug);
+         Client.DumpWriteQueue(TimeSpan.FromSeconds(MaxShutdownSeconds));
       }
 
       private static long GenerateID()

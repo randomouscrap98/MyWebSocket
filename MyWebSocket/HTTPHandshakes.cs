@@ -116,43 +116,44 @@ namespace MyWebSocket
                continue;
 
             string key = match.Groups[1].Value.Trim();
-            string value = match.Groups[2].Value.Trim();
+            string field = match.Groups[2].Value.Trim();
+            List<string> values = WebSocketHelper.Explode(field);
 
             //Check expected field values for correctness
-            if (key == "Upgrade" && value.ToLowerInvariant() != "websocket")
+            if (key == "Upgrade" && field.ToLowerInvariant() != "websocket")
             {
                error = "Bad Upgrade field!";
                return false;
             }
-            else if (key == "Connection" && value != "Upgrade")
+            else if (key == "Connection" && !values.Contains("Upgrade"))
             {
-               error = "Bad Connection field!";
+               error = "Bad Connection field! (" + field + ")";
                return false;
             }
-            else if (key == "Sec-WebSocket-Version" && value != ExpectedWebSocketVersion)
+            else if (key == "Sec-WebSocket-Version" && field != ExpectedWebSocketVersion)
             {
                error = "Bad Sec-WebSocket-Version! (expected " + ExpectedWebSocketVersion + ")";
                return false;
             }
             else if (key == "Host")
             {
-               result.Host = value;
+               result.Host = field;
             }
             else if (key == "Sec-WebSocket-Key")
             {
-               result.Key = value;
+               result.Key = field;
             }
             else if (key == "Origin")
             {
-               result.Origin = value;
+               result.Origin = field;
             }
             else if (key == "Sec-WebSocket-Protocol")
             {
-               result.Protocols = WebSocketHelper.Explode(value);
+               result.Protocols = values;
             }
             else if (key == "Sec-WebSocket-Extensions")
             {
-               result.Extensions = WebSocketHelper.Explode(value);
+               result.Extensions = values;
             }
 
             //If this is an expected field, say that we saw it (we would've quit if it was bad)
@@ -174,6 +175,7 @@ namespace MyWebSocket
       public string AcceptKey;
       public string HTTPVersion;
       public List<string> AcceptedProtocols = new List<string>();
+      public List<string> AcceptedExtensions = new List<string>();
       public Dictionary<string, string> ExtraFields = new Dictionary<string, string>();
 
       /// <summary>
@@ -222,14 +224,18 @@ namespace MyWebSocket
       {
          HTTPServerHandshake response = new HTTPServerHandshake();
          response.AcceptedProtocols = new List<string>(handshake.Protocols);
+         response.AcceptedExtensions = new List<string>(handshake.Extensions);
          response.AcceptKey = GenerateAcceptKey(handshake.Key);
          response.HTTPVersion = handshake.HTTPVersion;
          response.Status = "101 Switching Protocols";
          return response;
       }
 
-      public static HTTPServerHandshake GetBadRequest(Dictionary<string, string> extras)
+      public static HTTPServerHandshake GetBadRequest(Dictionary<string, string> extras = null)
       {
+         if (extras == null)
+            extras = new Dictionary<string, string>();
+         
          HTTPServerHandshake response = new HTTPServerHandshake();
          response.Status = "400 Bad Request";
          response.ExtraFields = extras;
