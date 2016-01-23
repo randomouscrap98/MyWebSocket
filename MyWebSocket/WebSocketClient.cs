@@ -149,50 +149,56 @@ namespace MyWebSocket
          //Pull a chunk of data (as much as we can) from the stream and store it in our internal buffer.
          DataStatus readStatus = GenericRead();
 
-         //If there was an error (anything other than "completion"), return the error.
-         if (readStatus != DataStatus.Complete)
+         //If there was an error (anything other than "completion" or waiting), return the error.
+         if (readStatus != DataStatus.Complete)// && readStatus != DataStatus.WaitingOnData)
             return readStatus;
+
+         //We MAY have read more than one frame at a time! Wowie...
+//         while (messageBufferSize > 0)
+//         {
+            //We need at least 2 bytes to complete the header.
+            if (messageBufferSize < 2)
+               return DataStatus.WaitingOnData;
+
+            byte[] message = messageBuffer.Take(messageBufferSize).ToArray();
+
+            //If the complete header hasn't been read yet, we're still waiting for it.
+            if (messageBufferSize < WebSocketHeader.FullHeaderSize(message))
+               return DataStatus.WaitingOnData;
+
+            WebSocketHeader header = new WebSocketHeader();
+
+            //If we can't parse the header at this point, we have some serious issues.
+            if (!WebSocketHeader.TryParse(message, out header))
+               return DataStatus.InternalError;
          
-         //We need at least 2 bytes to complete the header.
-         if (messageBufferSize < 2)
-            return DataStatus.WaitingOnData;
+            //Too much data
+            if (header.FrameSize > MaxReceiveSize)
+            {
+               Console.WriteLine("Oversized frame: " + header.FrameSize + " bytes (max: " + MaxReceiveSize + ")");
+               return DataStatus.OversizeError;
+            }
          
-         //If the complete header hasn't been read yet, we're still waiting for it.
-         if (messageBufferSize < WebSocketHeader.FullHeaderSize(messageBuffer))
-            return DataStatus.WaitingOnData;
+            //We have the whole header, but do we have the whole message? if not, we're still waiting on data.
+            if (messageBufferSize < header.FrameSize)
+               return DataStatus.WaitingOnData;
 
-         WebSocketHeader header = new WebSocketHeader();
+            //Oh, we have the whole message. Uhh ok then, let's make sure the header fields are correct
+            //before continuing. RSV needs to be 0 (may change later) and all client messages must be masked.
+            if (!header.Masked || header.RSV != 0)
+               return DataStatus.DataFormatError;
 
-         //If we can't parse the header at this point, we have some serious issues.
-         if (!WebSocketHeader.TryParse(messageBuffer, out header))
-            return DataStatus.InternalError;
-         
-         //Too much data
-         if (header.FrameSize > MaxReceiveSize)
-         {
-            Console.WriteLine("Oversized frame: " + header.FrameSize + " bytes (max: " + MaxReceiveSize + ")");
-            return DataStatus.OversizeError;
-         }
-         
-         //We have the whole header, but do we have the whole message? if not, we're still waiting on data.
-         if (messageBufferSize < header.FrameSize)
-            return DataStatus.WaitingOnData;
+            //Oh is this... a binary frame? Dawg... don't gimme that crap.
+            if (header.Opcode == HeaderOpcode.BinaryFrame)
+               return DataStatus.UnsupportedError;
 
-         //Oh, we have the whole message. Uhh ok then, let's make sure the header fields are correct
-         //before continuing. RSV needs to be 0 (may change later) and all client messages must be masked.
-         if (!header.Masked || header.RSV != 0)
-            return DataStatus.DataFormatError;
+            //Initialize a frame with our newly parsed data
+            frame = new WebSocketFrame(header, messageBuffer.Take(header.FrameSize).ToArray());
 
-         //Oh is this... a binary frame? Dawg... don't gimme that crap.
-         if (header.Opcode == HeaderOpcode.BinaryFrame)
-            return DataStatus.UnsupportedError;
-
-         //Initialize a frame with our newly parsed data
-         frame = new WebSocketFrame(header, messageBuffer.Take(header.FrameSize).ToArray());
-
-         //Remove the message data from the buffer
-         messageBuffer.TruncateBeginning(header.FrameSize);
-         messageBufferSize -= header.FrameSize;
+            //Remove the message data from the buffer
+            messageBuffer.TruncateBeginning(header.FrameSize);
+            messageBufferSize -= header.FrameSize;
+         //}
 
          return DataStatus.Complete;
       }
@@ -205,10 +211,19 @@ namespace MyWebSocket
       {
          try
          {
+//            if(stream.DataAvailable)
+//               Console.WriteLine("Data available " + messageBufferSize);
+            
             //DataAvailable only tells us if there is any data to be read on the stream,
             //not if the stream is closed. If it's closed, we 
             if (!stream.DataAvailable)
-               return DataStatus.WaitingOnData;
+            {
+               //if there's something in the buffer, it COULD be complete. It doesn't mean it is, but...
+               if(messageBufferSize > 0)
+                  return DataStatus.Complete;
+               else
+                  return DataStatus.WaitingOnData;
+            }
          }
          catch(Exception e)
          {

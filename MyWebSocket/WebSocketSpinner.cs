@@ -114,9 +114,9 @@ namespace MyWebSocket
 
          while (!shouldStop)
          {
-            if ((DateTime.Now - lastTest).TotalSeconds > 1)
+            if ((DateTime.Now - lastTest) > Server.PingInterval)
             {
-               Client.QueueRaw(WebSocketFrame.GetPingFrame().GetRawBytes());
+               Client.QueueRaw(WebSocketFrame.GetPongFrame().GetRawBytes());
                lastTest = DateTime.Now;
             }
 

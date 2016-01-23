@@ -18,6 +18,8 @@ namespace MyWebSocket
       public readonly string Service;
       public readonly Func<WebSocketUser> GenerateWebSocketUser;
 
+      public TimeSpan PingInterval = TimeSpan.FromSeconds(5);
+
       public WebSocketServer(int port, string service, Func<WebSocketUser> howToCreate,
          Logger logger = null, int maxSecondsToShutdown = 5) : base("WebSocket Server", maxSecondsToShutdown)
       {
