@@ -39,7 +39,7 @@ namespace MyWebSocket
 
    public class WebSocketServer : BasicSpinner, IDisposable
    {
-      public const string Version = "1.1.0";
+      public const string Version = "R_1.1.1";
 
       private WebSocketSettings settings;
       private List<WebSocketSpinner> connectionSpinners;

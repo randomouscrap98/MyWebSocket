@@ -41,7 +41,8 @@ namespace MyWebSocket
          User = Server.Settings.Generator();
          User.SetSendPlaceholder((message) =>
          {
-            Client.QueueMessage(message);
+            if(Client != null)
+               Client.QueueMessage(message);
          });
          User.SetGetAllUsersPlaceholder(() =>
          {
@@ -123,12 +124,6 @@ namespace MyWebSocket
 
          while (!shouldStop)
          {
-            if ((DateTime.Now - lastTest) > Server.Settings.PingInterval)
-            {
-               Client.QueueRaw(WebSocketFrame.GetPongFrame().GetRawBytes());
-               lastTest = DateTime.Now;
-            }
-
             //In the beginning, we wait for a handshake dawg.
             if (internalState == WebSocketState.Startup)
             {
@@ -151,8 +146,8 @@ namespace MyWebSocket
 
                   Client.QueueHandshakeMessage(response);
                   internalState = WebSocketState.Connected;
+                  lastTest = DateTime.Now;
                   Log("WebSocket handshake complete", LogLevel.Debug);
-
                }
                //Hmm, if it's not complete and we're not waiting, it's an error. Close the connection?
                else if (dataStatus != DataStatus.WaitingOnData)
@@ -172,6 +167,13 @@ namespace MyWebSocket
             }
             else if (internalState == WebSocketState.Connected)
             {
+               //Ping if we're already in a connected state
+               if ((DateTime.Now - lastTest) > Server.Settings.PingInterval)
+               {
+                  Client.QueueRaw(WebSocketFrame.GetPongFrame().GetRawBytes());
+                  lastTest = DateTime.Now;
+               }
+
                dataStatus = Client.TryReadFrame(out readFrame);
 
                //Ah, we got a full frame from the client! Let's see what it is
