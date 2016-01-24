@@ -7,47 +7,47 @@ using System.Linq;
 
 namespace MyWebSocket
 {
+   /// <summary>
+   /// An internal class which allows users to create a settings object. This helps 
+   /// when you inherit from the WebSocketServer class.
+   /// </summary>
+   public class WebSocketSettings
+   {
+      public readonly int Port;
+      public readonly string Service;
+      public readonly Func<WebSocketUser> Generator;
+      public readonly Logger LogProvider = Logger.DefaultLogger;
+      public TimeSpan ShutdownTimeout = TimeSpan.FromSeconds(5);
+      public TimeSpan PingInterval = TimeSpan.FromSeconds(10);
+      public TimeSpan ReadWriteTimeout = TimeSpan.FromSeconds(10);
+      public TimeSpan AcceptPollInterval = TimeSpan.FromMilliseconds(100);
+      public TimeSpan DataPollInterval = TimeSpan.FromMilliseconds(100);
+      public int ReceiveBufferSize = 2048;
+      public int SendBufferSize = 16384;
+      public int MaxReceiveSize = 16384;
+
+      public WebSocketSettings(int port, string service, Func<WebSocketUser> generator, Logger logger = null)
+      {
+         Port = port;
+         Service = service;
+         Generator = generator;
+
+         if(logger != null)
+            LogProvider = logger;
+      }
+   }
+
    public class WebSocketServer : BasicSpinner, IDisposable
    {
       public const string Version = "1.1.0";
 
-      private ServerSettings settings;
+      private WebSocketSettings settings;
       private List<WebSocketSpinner> connectionSpinners;
       private readonly object spinnerLock = new object();
 
-      public ServerSettings Settings
+      public WebSocketSettings Settings
       {
          get { return settings; }
-      }
-
-      /// <summary>
-      /// An internal class which allows users to create a settings object. This helps 
-      /// when you inherit from the WebSocketServer class.
-      /// </summary>
-      public class ServerSettings
-      {
-         public readonly int Port;
-         public readonly string Service;
-         public readonly Func<WebSocketUser> Generator;
-         public readonly Logger LogProvider = Logger.DefaultLogger;
-         public TimeSpan ShutdownTimeout = TimeSpan.FromSeconds(5);
-         public TimeSpan PingInterval = TimeSpan.FromSeconds(10);
-         public TimeSpan ReadWriteTimeout = TimeSpan.FromSeconds(10);
-         public TimeSpan AcceptPollInterval = TimeSpan.FromMilliseconds(100);
-         public TimeSpan DataPollInterval = TimeSpan.FromMilliseconds(100);
-         public int ReceiveBufferSize = 2048;
-         public int SendBufferSize = 16384;
-         public int MaxReceiveSize = 16384;
-
-         public ServerSettings(int port, string service, Func<WebSocketUser> generator, Logger logger = null)
-         {
-            Port = port;
-            Service = service;
-            Generator = generator;
-
-            if(logger != null)
-               LogProvider = logger;
-         }
       }
 
       /// <summary>
@@ -55,7 +55,7 @@ namespace MyWebSocket
       /// settings object.
       /// </summary>
       /// <param name="settings">Settings.</param>
-      public WebSocketServer(ServerSettings settings) : base("WebSocketServer", settings.ShutdownTimeout)
+      public WebSocketServer(WebSocketSettings settings) : base("WebSocketServer", settings.ShutdownTimeout)
       {
          this.settings = settings;
          connectionSpinners = new List<WebSocketSpinner>();
