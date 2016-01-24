@@ -8,6 +8,7 @@ namespace MyWebSocket
       private Func<List<WebSocketUser>> GetAllUsersPlaceholder = null;
       private Action<string> BroadcastPlaceholder = null;
       private Action<string> SendPlaceholder = null;
+      private Action CloseSelfPlaceholder = null;
 
       public WebSocketUser()
       {
@@ -29,6 +30,11 @@ namespace MyWebSocket
          BroadcastPlaceholder = function;
       }
 
+      public void SetCloseSelfPlaceholder(Action function)
+      {
+         CloseSelfPlaceholder = function;
+      }
+
       /// <summary>
       /// Broadcast the specified message to all connected users.
       /// </summary>
@@ -45,12 +51,26 @@ namespace MyWebSocket
             SendPlaceholder(message);
       }
 
+      public void CloseSelf()
+      {
+         if (CloseSelfPlaceholder != null)
+            CloseSelfPlaceholder();
+      }
+
       /// <summary>
       /// This function is called when the websocket receives a message. Override this function
       /// to perform actions on received messages.
       /// </summary>
       /// <param name="message">Message.</param>
       public virtual void ReceivedMessage(string message)
+      {
+
+      }
+
+      /// <summary>
+      /// Called when the websocket connection has closed. This is AFTER closing.
+      /// </summary>
+      public virtual void ClosedConnection()
       {
 
       }

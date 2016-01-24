@@ -13,7 +13,8 @@ namespace WebSocketRunner
       {
          Logger logger = new Logger(100, "", LogLevel.SuperDebug);
 
-         WebSocketServer server = new WebSocketServer(45695, "chat", () => { return new EchoUser(); }, logger);
+         WebSocketServer server = new WebSocketServer(
+            new WebSocketServer.ServerSettings(45695, "chat", () => { return new EchoUser(); }, logger));
 
          if (!server.Start())
          {

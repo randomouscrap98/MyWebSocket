@@ -379,6 +379,21 @@ namespace MyWebSocket
 
          return new WebSocketFrame(header, new byte[0]);
       }
+
+      /// <summary>
+      /// Get a whole basic close frame, completely built.
+      /// </summary>
+      /// <returns>The close frame.</returns>
+      public static WebSocketFrame GetCloseFrame()
+      {
+         WebSocketHeader header = new WebSocketHeader();
+         header.Fin = true;
+         header.Masked = false;
+         header.Opcode = HeaderOpcode.CloseConnectionFrame;
+         header.PayloadSize = 0;
+
+         return new WebSocketFrame(header, new byte[0]);
+      }
    }
 }
 

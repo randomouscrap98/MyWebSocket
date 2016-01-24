@@ -31,13 +31,14 @@ namespace MyWebSocket
       private static long NextID = 1;
       private static readonly object idLock = new object();
 
-      public WebSocketSpinner(WebSocketServer managingServer, WebSocketClient supportingClient) : base("WebsocketSpinner")
+      public WebSocketSpinner(WebSocketServer managingServer, WebSocketClient supportingClient) 
+         : base("WebsocketSpinner", managingServer.Settings.ShutdownTimeout)
       {
          Client = supportingClient;
          Server = managingServer;
          ID = GenerateID();
 
-         User = Server.GenerateWebSocketUser();
+         User = Server.Settings.Generator();
          User.SetSendPlaceholder((message) =>
          {
             Client.QueueMessage(message);
@@ -48,8 +49,11 @@ namespace MyWebSocket
          });
          User.SetBroadcastPlaceholder((message) =>
          {
-            foreach(WebSocketUser user in Server.ConnectedUsers())
-               user.Send(message);
+            Server.GeneralBroadcast(message);
+         });
+         User.SetCloseSelfPlaceholder(() =>
+         {
+            CleanClose();
          });
 
          fragmentBuffer = new byte[Client.MaxReceiveSize];
@@ -104,6 +108,11 @@ namespace MyWebSocket
             Slog("Tried to use an unsupported WebSocket feature!", LogLevel.Warning);
       }
 
+      public void CleanClose()
+      {
+         Client.QueueRaw(WebSocketFrame.GetCloseFrame().GetRawBytes());
+      }
+
       protected override void Spin()
       {
          string error = "";
@@ -114,7 +123,7 @@ namespace MyWebSocket
 
          while (!shouldStop)
          {
-            if ((DateTime.Now - lastTest) > Server.PingInterval)
+            if ((DateTime.Now - lastTest) > Server.Settings.PingInterval)
             {
                Client.QueueRaw(WebSocketFrame.GetPongFrame().GetRawBytes());
                lastTest = DateTime.Now;
@@ -129,7 +138,7 @@ namespace MyWebSocket
                //Wow, we got a real thing! Let's see if the header is what we need!
                if (dataStatus == DataStatus.Complete)
                {
-                  if (readHandshake.Service != Server.Service)
+                  if (readHandshake.Service != Server.Settings.Service)
                   {
                      Client.QueueHandshakeMessage(HTTPServerHandshake.GetBadRequest());
                      break;
@@ -224,7 +233,9 @@ namespace MyWebSocket
 
          //Now that we're ending, try to dump out a bit of the write queue.
          Log("Connection spinner finished. Dumping write queue", LogLevel.Debug);
-         Client.DumpWriteQueue(TimeSpan.FromSeconds(MaxShutdownSeconds));
+         Client.DumpWriteQueue(Server.Settings.ShutdownTimeout);
+
+         User.ClosedConnection();
       }
 
       private static long GenerateID()

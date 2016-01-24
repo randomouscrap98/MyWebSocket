@@ -9,36 +9,69 @@ namespace MyWebSocket
 {
    public class WebSocketServer : BasicSpinner, IDisposable
    {
-      private int port;
+      public const string Version = "1.1.0";
+
+      private ServerSettings settings;
       private List<WebSocketSpinner> connectionSpinners;
       private readonly object spinnerLock = new object();
-      private Logger logger = Logger.DefaultLogger;
-      private System.Timers.Timer cleanupTimer = new System.Timers.Timer();
 
-      public readonly string Service;
-      public readonly Func<WebSocketUser> GenerateWebSocketUser;
-
-      public TimeSpan PingInterval = TimeSpan.FromSeconds(5);
-
-      public WebSocketServer(int port, string service, Func<WebSocketUser> howToCreate,
-         Logger logger = null, int maxSecondsToShutdown = 5) : base("WebSocket Server", maxSecondsToShutdown)
+      public ServerSettings Settings
       {
-         this.port = port;
+         get { return settings; }
+      }
+
+      /// <summary>
+      /// An internal class which allows users to create a settings object. This helps 
+      /// when you inherit from the WebSocketServer class.
+      /// </summary>
+      public class ServerSettings
+      {
+         public readonly int Port;
+         public readonly string Service;
+         public readonly Func<WebSocketUser> Generator;
+         public readonly Logger LogProvider = Logger.DefaultLogger;
+         public TimeSpan ShutdownTimeout = TimeSpan.FromSeconds(5);
+         public TimeSpan PingInterval = TimeSpan.FromSeconds(10);
+         public TimeSpan ReadWriteTimeout = TimeSpan.FromSeconds(10);
+         public TimeSpan AcceptPollInterval = TimeSpan.FromMilliseconds(100);
+         public TimeSpan DataPollInterval = TimeSpan.FromMilliseconds(100);
+         public int ReceiveBufferSize = 2048;
+         public int SendBufferSize = 16384;
+         public int MaxReceiveSize = 16384;
+
+         public ServerSettings(int port, string service, Func<WebSocketUser> generator, Logger logger = null)
+         {
+            Port = port;
+            Service = service;
+            Generator = generator;
+
+            if(logger != null)
+               LogProvider = logger;
+         }
+      }
+
+      /// <summary>
+      /// Initializes a new instance of the <see cref="MyWebSocket.WebSocketServer"/> class using a preconstructed
+      /// settings object.
+      /// </summary>
+      /// <param name="settings">Settings.</param>
+      public WebSocketServer(ServerSettings settings) : base("WebSocketServer", settings.ShutdownTimeout)
+      {
+         this.settings = settings;
          connectionSpinners = new List<WebSocketSpinner>();
          ReportsSpinStatus = true;
-         Service = service;
-         GenerateWebSocketUser = howToCreate;
-
-         //MaxShutdownSeconds = maxSecondsToShutdown;
-         cleanupTimer.Interval = TimeSpan.FromSeconds(5).TotalMilliseconds;
-
-         if (logger != null)
-            this.logger = logger;
       }
 
       public void Dispose()
       {
-         cleanupTimer.Dispose();
+         if (connectionSpinners != null)
+         {
+            foreach (WebSocketSpinner spinner in new List<WebSocketSpinner>(connectionSpinners))
+               ObliterateSpinner(spinner);
+
+            connectionSpinners.Clear();
+            connectionSpinners = null;
+         }
       }
 
       public List<WebSocketUser> ConnectedUsers()
@@ -47,6 +80,12 @@ namespace MyWebSocket
          {
             return connectionSpinners.Select(x => x.User).ToList();
          }
+      }
+
+      public void GeneralBroadcast(string message)
+      {
+         foreach(WebSocketUser user in ConnectedUsers())
+            user.Send(message);
       }
 
       /// <summary>
@@ -68,7 +107,7 @@ namespace MyWebSocket
       /// <param name="tag">Tag.</param>
       public void LogGeneral(string message, LogLevel level = LogLevel.Normal, string tag = "WebSocketServer")
       {
-         logger.LogGeneral(message, level, tag);
+         settings.LogProvider.LogGeneral(message, level, tag);
       }
 
       /// <summary>
@@ -107,7 +146,7 @@ namespace MyWebSocket
       protected override void Spin()
       {
          spinnerStatus = SpinStatus.Starting;
-         TcpListener server = new TcpListener(System.Net.IPAddress.Any, port);
+         TcpListener server = new TcpListener(System.Net.IPAddress.Any, settings.Port);
 
          try
          {
@@ -120,7 +159,7 @@ namespace MyWebSocket
             return;
          }
 
-         Log("Started server on port: " + port);
+         Log("Started server on port: " + settings.Port);
          spinnerStatus = SpinStatus.Spinning;
 
          while (!shouldStop)
@@ -132,10 +171,10 @@ namespace MyWebSocket
 
                //Accept the client and set it up
                TcpClient client = server.AcceptTcpClient();
-               client.ReceiveBufferSize = 2048;
-               client.SendBufferSize = 16384;
-               client.SendTimeout = client.ReceiveTimeout = 10000;
-               WebSocketClient webClient = new WebSocketClient(client);
+               client.ReceiveBufferSize = settings.ReceiveBufferSize;
+               client.SendBufferSize = settings.SendBufferSize;
+               client.SendTimeout = client.ReceiveTimeout = (int)settings.ReadWriteTimeout.TotalMilliseconds;
+               WebSocketClient webClient = new WebSocketClient(client, settings.MaxReceiveSize);
 
                //Start up a spinner to handle this new connection. The spinner will take care of headers and all that,
                //we're just here to intercept new connections.
@@ -159,7 +198,7 @@ namespace MyWebSocket
 
             }
 
-            System.Threading.Thread.Sleep(100);
+            System.Threading.Thread.Sleep((int)settings.AcceptPollInterval.TotalMilliseconds);
          }
 
          Log("Attempting to stop server", LogLevel.Debug);

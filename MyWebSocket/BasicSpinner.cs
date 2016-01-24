@@ -13,20 +13,21 @@ namespace MyWebSocket
    public class BasicSpinner
    {
       private Thread spinner = null;
-      //private Thread completeThread = null;
       protected SpinStatus spinnerStatus = SpinStatus.None;
       protected bool shouldStop = false;
       protected bool ReportsSpinStatus = false;
 
-      public readonly string SpinnerName = "Spinner";
-      public readonly int MaxShutdownSeconds;
+      public readonly string SpinnerName = "BasicSpinner";
+      public readonly TimeSpan ShutdownTimeout = TimeSpan.FromSeconds(5);
 
       public event SpinnerComplete OnComplete;
 
-      public BasicSpinner(string name, int maxSecondsToShutdown = 5)
+      public BasicSpinner(string name, TimeSpan? shutdownTimeout = null)
       {
          SpinnerName = name;
-         MaxShutdownSeconds = maxSecondsToShutdown;
+
+         if (shutdownTimeout != null)
+            ShutdownTimeout = (TimeSpan)shutdownTimeout;
       }
 
       public void Complete()
@@ -34,9 +35,6 @@ namespace MyWebSocket
          if (OnComplete != null)
          {
             OnComplete(this);
-            //This is HORRIFYING, but for now this is what I'm doing.
-            //completeThread = new Thread(() => OnComplete(this));
-            //completeThread.Start();
          }
       }
 
@@ -107,14 +105,8 @@ namespace MyWebSocket
       /// <value><c>true</c> if running; otherwise, <c>false</c>.</value>
       public bool Running
       {
-         get { return spinner != null && spinner.IsAlive; } /* ||
-            completeThread != null && completeThread.IsAlive; } */
+         get { return spinner != null && spinner.IsAlive; }
       }
-
-//      private bool CompleteRunning
-//      {
-//         get { return completeThread != null && completeThread.IsAlive; }
-//      }
 
       /// <summary>
       /// Attempt to stop the spinner. If it's hanging, it'll kill the thread forcefully
@@ -169,7 +161,7 @@ namespace MyWebSocket
       {
          DateTime start = DateTime.Now;
 
-         while (Running && (DateTime.Now - start) < TimeSpan.FromSeconds(MaxShutdownSeconds))
+         while (Running && (DateTime.Now - start) < ShutdownTimeout)
             Thread.Sleep(100);
 
          return !Running;

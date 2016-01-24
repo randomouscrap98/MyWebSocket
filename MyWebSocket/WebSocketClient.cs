@@ -48,7 +48,7 @@ namespace MyWebSocket
          get { return parsedHandshake != null; }
       }
 
-      public WebSocketClient(TcpClient newClient, int maxReceiveSize = 16384)
+      public WebSocketClient(TcpClient newClient, int maxReceiveSize = Int16.MaxValue)
       {
          Client = newClient;
          stream = Client.GetStream();
