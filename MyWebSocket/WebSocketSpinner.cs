@@ -127,6 +127,13 @@ namespace MyWebSocket
             //In the beginning, we wait for a handshake dawg.
             if (internalState == WebSocketState.Startup)
             {
+               //Oof, you're taking too long!
+               if ((DateTime.Now - lastTest) > Server.Settings.HandshakeTimeout)
+               {
+                  Log("Handshake timeout", LogLevel.Warning);
+                  break;
+               }
+
                HTTPClientHandshake readHandshake;
                dataStatus = Client.TryReadHandshake(out readHandshake, out error);
 
@@ -170,6 +177,7 @@ namespace MyWebSocket
                //Ping if we're already in a connected state
                if ((DateTime.Now - lastTest) > Server.Settings.PingInterval)
                {
+                  Log("Sending heartbeat", LogLevel.SuperDebug);
                   Client.QueueRaw(WebSocketFrame.GetPongFrame().GetRawBytes());
                   lastTest = DateTime.Now;
                }
@@ -210,6 +218,7 @@ namespace MyWebSocket
                   else if (readFrame.Header.Opcode == HeaderOpcode.CloseConnectionFrame)
                   {
                      Log("Client is disconnecting: " + readFrame.CloseCode, LogLevel.Debug);
+                     readFrame.Header.Masked = false;
                      Client.QueueRaw(readFrame.GetRawBytes());
                      break;
                   }
@@ -232,7 +241,7 @@ namespace MyWebSocket
 
             Thread.Sleep(100);
          }
-
+         
          //Now that we're ending, try to dump out a bit of the write queue.
          Log("Connection spinner finished. Dumping write queue", LogLevel.Debug);
          Client.DumpWriteQueue(Server.Settings.ShutdownTimeout);

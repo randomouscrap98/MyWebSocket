@@ -20,6 +20,7 @@ namespace MyWebSocket
       public TimeSpan ShutdownTimeout = TimeSpan.FromSeconds(5);
       public TimeSpan PingInterval = TimeSpan.FromSeconds(10);
       public TimeSpan ReadWriteTimeout = TimeSpan.FromSeconds(10);
+      public TimeSpan HandshakeTimeout = TimeSpan.FromSeconds(10);
       public TimeSpan AcceptPollInterval = TimeSpan.FromMilliseconds(100);
       public TimeSpan DataPollInterval = TimeSpan.FromMilliseconds(100);
       public int ReceiveBufferSize = 2048;
@@ -39,7 +40,7 @@ namespace MyWebSocket
 
    public class WebSocketServer : BasicSpinner, IDisposable
    {
-      public const string Version = "R_1.1.1";
+      public const string Version = "R_1.1.2";
 
       private WebSocketSettings settings;
       private List<WebSocketSpinner> connectionSpinners;
