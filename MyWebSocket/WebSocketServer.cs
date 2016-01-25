@@ -40,7 +40,7 @@ namespace MyWebSocket
 
    public class WebSocketServer : BasicSpinner, IDisposable
    {
-      public const string Version = "R_1.1.2";
+      public const string Version = "R_1.1.3";
 
       private WebSocketSettings settings;
       private List<WebSocketSpinner> connectionSpinners;

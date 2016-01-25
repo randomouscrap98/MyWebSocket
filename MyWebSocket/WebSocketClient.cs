@@ -80,6 +80,17 @@ namespace MyWebSocket
          }
       }
 
+      public int WriteQueueSize
+      {
+         get
+         {
+            lock (outputLock)
+            {
+               return outputBuffer.Count;
+            }
+         }
+      }
+
       public bool Connected
       {
          get { return Client.GetState() == System.Net.NetworkInformation.TcpState.Established; }
@@ -175,7 +186,6 @@ namespace MyWebSocket
             //Too much data
             if (header.FrameSize > MaxReceiveSize)
             {
-               Console.WriteLine("Oversized frame: " + header.FrameSize + " bytes (max: " + MaxReceiveSize + ")");
                return DataStatus.OversizeError;
             }
          
@@ -211,9 +221,6 @@ namespace MyWebSocket
       {
          try
          {
-//            if(stream.DataAvailable)
-//               Console.WriteLine("Data available " + messageBufferSize);
-            
             //DataAvailable only tells us if there is any data to be read on the stream,
             //not if the stream is closed. If it's closed, we 
             if (!stream.DataAvailable)
@@ -269,7 +276,8 @@ namespace MyWebSocket
       /// <param name="handshake">Handshake.</param>
       public void QueueHandshakeMessage(HTTPServerHandshake handshake)
       {
-         QueueMessage(handshake.ToString(), System.Text.Encoding.ASCII);
+         QueueRaw(System.Text.Encoding.ASCII.GetBytes(handshake.ToString()));
+         //QueueMessage(handshake.ToString(), System.Text.Encoding.ASCII);
       }
 
       /// <summary>

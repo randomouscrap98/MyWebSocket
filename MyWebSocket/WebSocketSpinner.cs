@@ -151,6 +151,7 @@ namespace MyWebSocket
                   response.AcceptedProtocols.Clear();
                   response.AcceptedExtensions.Clear();
 
+                  //Client.QueueHandshakeMessage(HTTPServerHandshake.GetBadRequest());
                   Client.QueueHandshakeMessage(response);
                   internalState = WebSocketState.Connected;
                   lastTest = DateTime.Now;

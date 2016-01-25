@@ -102,7 +102,7 @@ namespace MyWebSocket
             return false;
          }
 
-         result.HTTPVersion = subArguments[1];
+         result.HTTPVersion = subArguments[1].Trim();
 
          Dictionary<string, bool> completes = ExpectedFields.ToDictionary(x => x, y => false);
 
@@ -173,7 +173,7 @@ namespace MyWebSocket
       public const string GUID = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11";
       public string Status;
       public string AcceptKey;
-      public string HTTPVersion;
+      public string HTTPVersion = HTTPClientHandshake.ExpectedHTTPVersion;
       public List<string> AcceptedProtocols = new List<string>();
       public List<string> AcceptedExtensions = new List<string>();
       public Dictionary<string, string> ExtraFields = new Dictionary<string, string>();
