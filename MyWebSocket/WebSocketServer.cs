@@ -40,7 +40,7 @@ namespace MyWebSocket
 
    public class WebSocketServer : BasicSpinner, IDisposable
    {
-      public const string Version = "R_1.1.3";
+      public const string Version = "R_1.1.4";
 
       private WebSocketSettings settings;
       private List<WebSocketSpinner> connectionSpinners;
@@ -168,7 +168,7 @@ namespace MyWebSocket
             //NO! NO BLOCKING! This is basically nonblocking... kind of.
             if (server.Pending())
             {
-               Log("Accepting pending connection", LogLevel.Debug);
+               //Log("Accepting pending connection", LogLevel.Debug);
 
                //Accept the client and set it up
                TcpClient client = server.AcceptTcpClient();
@@ -182,21 +182,17 @@ namespace MyWebSocket
                WebSocketSpinner newSpinner = new WebSocketSpinner(this, webClient);
                newSpinner.OnComplete += RemoveSpinner;
 
+               Log("Accepted connection from " + client.Client.RemoteEndPoint);
+               lock (spinnerLock)
+               {
+                  connectionSpinners.Add(newSpinner);
+               }
+
                if (!newSpinner.Start())
                {
                   Log("Couldn't startup client spinner!", LogLevel.Error);
                   ObliterateSpinner(newSpinner);
                }
-               else
-               {
-                  lock (spinnerLock)
-                  {
-                     connectionSpinners.Add(newSpinner);
-                  }
-
-                  Log("Accepted connection from " + client.Client.RemoteEndPoint);
-               }
-
             }
 
             System.Threading.Thread.Sleep((int)settings.AcceptPollInterval.TotalMilliseconds);
