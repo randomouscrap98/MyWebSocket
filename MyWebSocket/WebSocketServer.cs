@@ -40,7 +40,7 @@ namespace MyWebSocket
 
    public class WebSocketServer : BasicSpinner, IDisposable
    {
-      public const string Version = "R_1.1.4";
+      public const string Version = "R_1.1.5";
 
       private WebSocketSettings settings;
       private List<WebSocketSpinner> connectionSpinners;
@@ -168,30 +168,35 @@ namespace MyWebSocket
             //NO! NO BLOCKING! This is basically nonblocking... kind of.
             if (server.Pending())
             {
-               //Log("Accepting pending connection", LogLevel.Debug);
-
                //Accept the client and set it up
-               TcpClient client = server.AcceptTcpClient();
-               client.ReceiveBufferSize = settings.ReceiveBufferSize;
-               client.SendBufferSize = settings.SendBufferSize;
-               client.SendTimeout = client.ReceiveTimeout = (int)settings.ReadWriteTimeout.TotalMilliseconds;
-               WebSocketClient webClient = new WebSocketClient(client, settings.MaxReceiveSize);
-
-               //Start up a spinner to handle this new connection. The spinner will take care of headers and all that,
-               //we're just here to intercept new connections.
-               WebSocketSpinner newSpinner = new WebSocketSpinner(this, webClient);
-               newSpinner.OnComplete += RemoveSpinner;
-
-               Log("Accepted connection from " + client.Client.RemoteEndPoint);
-               lock (spinnerLock)
+               try
                {
-                  connectionSpinners.Add(newSpinner);
+                  TcpClient client = server.AcceptTcpClient();
+                  client.ReceiveBufferSize = settings.ReceiveBufferSize;
+                  client.SendBufferSize = settings.SendBufferSize;
+                  client.SendTimeout = client.ReceiveTimeout = (int)settings.ReadWriteTimeout.TotalMilliseconds;
+                  WebSocketClient webClient = new WebSocketClient(client, settings.MaxReceiveSize);
+
+                  //Start up a spinner to handle this new connection. The spinner will take care of headers and all that,
+                  //we're just here to intercept new connections.
+                  WebSocketSpinner newSpinner = new WebSocketSpinner(this, webClient);
+                  newSpinner.OnComplete += RemoveSpinner;
+
+                  Log("Accepted connection from " + client.Client.RemoteEndPoint);
+                  lock (spinnerLock)
+                  {
+                     connectionSpinners.Add(newSpinner);
+                  }
+
+                  if (!newSpinner.Start())
+                  {
+                     Log("Couldn't startup client spinner!", LogLevel.Error);
+                     ObliterateSpinner(newSpinner);
+                  }
                }
-
-               if (!newSpinner.Start())
+               catch(Exception e)
                {
-                  Log("Couldn't startup client spinner!", LogLevel.Error);
-                  ObliterateSpinner(newSpinner);
+                  Log("Encountered exception while accepting: " + e, LogLevel.Error);
                }
             }
 
