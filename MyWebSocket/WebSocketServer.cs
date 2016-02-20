@@ -7,37 +7,6 @@ using System.Linq;
 
 namespace MyWebSocket
 {
-   /// <summary>
-   /// An internal class which allows users to create a settings object. This helps 
-   /// when you inherit from the WebSocketServer class.
-   /// </summary>
-   public class WebSocketSettings
-   {
-      public readonly int Port;
-      public readonly string Service;
-      public readonly Func<WebSocketUser> Generator;
-      public readonly Logger LogProvider = Logger.DefaultLogger;
-      public TimeSpan ShutdownTimeout = TimeSpan.FromSeconds(5);
-      public TimeSpan PingInterval = TimeSpan.FromSeconds(10);
-      public TimeSpan ReadWriteTimeout = TimeSpan.FromSeconds(10);
-      public TimeSpan HandshakeTimeout = TimeSpan.FromSeconds(10);
-      public TimeSpan AcceptPollInterval = TimeSpan.FromMilliseconds(100);
-      public TimeSpan DataPollInterval = TimeSpan.FromMilliseconds(100);
-      public int ReceiveBufferSize = 2048;
-      public int SendBufferSize = 16384;
-      public int MaxReceiveSize = 16384;
-
-      public WebSocketSettings(int port, string service, Func<WebSocketUser> generator, Logger logger = null)
-      {
-         Port = port;
-         Service = service;
-         Generator = generator;
-
-         if(logger != null)
-            LogProvider = logger;
-      }
-   }
-
    public class WebSocketServer : BasicSpinner, IDisposable
    {
       public const string Version = "R_1.1.5";
@@ -179,7 +148,7 @@ namespace MyWebSocket
 
                   //Start up a spinner to handle this new connection. The spinner will take care of headers and all that,
                   //we're just here to intercept new connections.
-                  WebSocketSpinner newSpinner = new WebSocketSpinner(this, webClient);
+                  WebSocketSpinner newSpinner = new WebSocketSpinner(webClient, GenerateNewUser(), settings);
                   newSpinner.OnComplete += RemoveSpinner;
 
                   Log("Accepted connection from " + client.Client.RemoteEndPoint);
@@ -212,6 +181,22 @@ namespace MyWebSocket
 
          Log("Server shut down");
          spinnerStatus = SpinStatus.Complete;
+      }
+
+      public WebSocketUser GenerateNewUser()
+      {
+         WebSocketUser User = settings.Generator();
+
+         User.SetGetAllUsersPlaceholder(() =>
+         {
+            return ConnectedUsers();
+         });
+         User.SetBroadcastPlaceholder((message) =>
+         {
+            GeneralBroadcast(message);
+         });
+
+         return User;
       }
    }
 }

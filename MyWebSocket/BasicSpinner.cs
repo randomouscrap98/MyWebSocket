@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Threading;
 using MyExtensions.Logging;
+using System.Threading.Tasks;
 
 namespace MyWebSocket
 {

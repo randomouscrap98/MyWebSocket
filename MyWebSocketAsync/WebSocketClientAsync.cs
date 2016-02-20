@@ -4,7 +4,6 @@ using System.Collections.Generic;
 using System.IO;
 using System.Threading;
 using System.Linq;
-using System.Threading.Tasks;
 
 namespace MyWebSocket
 {
@@ -13,7 +12,6 @@ namespace MyWebSocket
    /// </summary>
    public enum DataStatus
    {
-      DataAvailable,
       Complete,
       WaitingOnData,
       EndOfStream,
@@ -31,7 +29,7 @@ namespace MyWebSocket
    /// Represents a client connected over websockets. Main class of websocket library: controls
    /// messages sent and received on the websocket, including the HTTP handshake.
    /// </summary>
-   public class WebSocketClient : IDisposable
+   public class WebSocketClientAsync : IDisposable
    {
       public readonly int MaxReceiveSize;
 
@@ -43,14 +41,13 @@ namespace MyWebSocket
       private byte[] messageBuffer;
       private int messageBufferSize = 0;
       private HTTPClientHandshake parsedHandshake = null;
-      private CancellationTokenSource cancelSource = new CancellationTokenSource();
 
       public bool HandShakeComplete
       {
          get { return parsedHandshake != null; }
       }
 
-      public WebSocketClient(TcpClient newClient, int maxReceiveSize = Int16.MaxValue)
+      public WebSocketClientAsync(TcpClient newClient, int maxReceiveSize = Int16.MaxValue)
       {
          Client = newClient;
          stream = Client.GetStream();
@@ -69,11 +66,6 @@ namespace MyWebSocket
       /// <see cref="MyWebSocket.WebSocketClient"/> was occupying.</remarks>
       public void Dispose()
       {
-         if (cancelSource != null)
-         {
-            cancelSource.Dispose();
-            cancelSource = null;
-         }
          if (stream != null)
          {
             stream.Dispose();
@@ -84,14 +76,6 @@ namespace MyWebSocket
             Client.Close();
             Client = null;
          }
-      }
-
-      public void CancelAsyncOperations()
-      {
-         //We do both just in case. All ASYNC operations are passed this cancellation token
-         //(if they accept it), but we also close the stream because cancellation token doesn't work all the time.
-         cancelSource.Cancel();
-         stream.Close();
       }
 
       public int WriteQueueSize
@@ -108,12 +92,6 @@ namespace MyWebSocket
       public bool Connected
       {
          get { return Client.GetState() == System.Net.NetworkInformation.TcpState.Established; }
-      }
-
-      public void MessageBufferPop(int size)
-      {
-         messageBuffer.TruncateBeginning(size, messageBufferSize);
-         messageBufferSize -= size;
       }
 
       /// <summary>
@@ -150,9 +128,8 @@ namespace MyWebSocket
             if(HTTPClientHandshake.TryParse(handshake, out result, out error))
             {
                //Push the data in the buffer back. We may have read a bit of the new data.
-               MessageBufferPop(handshakeEnd + 4);
-//               messageBuffer.TruncateBeginning(handshakeEnd + 4, messageBufferSize);
-//               messageBufferSize -= (handshakeEnd + 4);
+               messageBuffer.TruncateBeginning(handshakeEnd + 4);
+               messageBufferSize -= (handshakeEnd + 4);
 
                parsedHandshake = result;
                return DataStatus.Complete;
@@ -170,56 +147,6 @@ namespace MyWebSocket
       }
 
       /// <summary>
-      /// Read and properly parse the message for the HTTP handshake portion of
-      /// a WebSocket connection.
-      /// </summary>
-      /// <returns>The read handshake.</returns>
-      public async Task<Tuple<DataStatus, HTTPClientHandshake, string>> ReadHandshakeAsync()
-      {
-         //You've already done the handshake, you idiot.
-         if (HandShakeComplete)
-            return Tuple.Create(DataStatus.Complete, parsedHandshake, "");
-
-         string handshake = "";
-         int handshakeEnd = 0;
-         string error = "";
-         HTTPClientHandshake result = new HTTPClientHandshake();
-
-         //Keep repeating until we have the whole handshake. It's OK if the stream stops in the middle
-         //of the operation, because we'll just return the proper data status.
-         do
-         {
-            //Pull a chunk of data (as much as we can) from the stream and store it in our internal buffer.
-            DataStatus readStatus = await GenericReadAsync();
-
-            //If there was an error (anything other than "completion"), return the error.
-            if (readStatus != DataStatus.Complete)
-               return Tuple.Create(readStatus, result, "");
-
-            //Now let's see if we read the whole header by searching for the header ending symbol.
-            handshake = System.Text.Encoding.ASCII.GetString(messageBuffer, 0, messageBufferSize);
-            handshakeEnd = handshake.IndexOf("\r\n\r\n");
-
-         } while(handshakeEnd < 0);
-
-         //We read the whole header, now it's time to parse it.
-         if (HTTPClientHandshake.TryParse(handshake, out result, out error))
-         {
-            //Push the data in the buffer back. We may have read a bit of the new data.
-            MessageBufferPop(handshakeEnd + 4);
-//            messageBuffer.TruncateBeginning(handshakeEnd + 4, messageBufferSize);
-//            messageBufferSize -= (handshakeEnd + 4);
-
-            parsedHandshake = result;
-            return Tuple.Create(DataStatus.Complete, result, error);
-         }
-         else
-         {
-            return Tuple.Create(DataStatus.DataFormatError, result, error);
-         }
-      }
-
-      /// <summary>
       /// Attempts to read an entire frame. Returns the frame if one was successfully read.
       /// </summary>
       /// <returns>The status of the read operation</returns>
@@ -232,7 +159,7 @@ namespace MyWebSocket
          DataStatus readStatus = GenericRead();
 
          //If there was an error (anything other than "completion" or waiting), return the error.
-         if (readStatus != DataStatus.Complete)
+         if (readStatus != DataStatus.Complete)// && readStatus != DataStatus.WaitingOnData)
             return readStatus;
 
          //We MAY have read more than one frame at a time! Wowie...
@@ -277,92 +204,11 @@ namespace MyWebSocket
             frame = new WebSocketFrame(header, messageBuffer.Take(header.FrameSize).ToArray());
 
             //Remove the message data from the buffer
-            MessageBufferPop(header.FrameSize);
-//            messageBuffer.TruncateBeginning(header.FrameSize, messageBufferSize);
-//            messageBufferSize -= header.FrameSize;
+            messageBuffer.TruncateBeginning(header.FrameSize);
+            messageBufferSize -= header.FrameSize;
          //}
 
          return DataStatus.Complete;
-      }
-
-      /// <summary>
-      /// Attempts to read an entire frame. Only finishes when a whole frame is read or an exception is encountered
-      /// </summary>
-      /// <returns>The status of the read operation</returns>
-      /// <param name="frame">The parsed frame (on success)</param>
-      public async Task<Tuple<DataStatus, WebSocketFrame>> ReadFrameAsync()
-      {
-         WebSocketFrame frame = new WebSocketFrame();
-         DataStatus readStatus = DataStatus.UnknownError;
-         WebSocketHeader header = null;
-         byte[] message = null;
-
-         Func<DataStatus, Tuple<DataStatus,WebSocketFrame>> FramePackage = x => Tuple.Create(x, frame);
-
-         //Continue reading until we get a full frame. If the result is ever NOT complete 
-         //(as in no read was performed), we should get the hell outta here
-         do
-         {
-            readStatus = await GenericReadAsync();
-
-            //If there was an error (anything other than "completion" or waiting), return the error.
-            if (readStatus != DataStatus.Complete)
-               return FramePackage(readStatus);
-
-            //Oh good, there's at least enough to know the header size.
-            if(messageBufferSize > 2)
-            {
-               message = messageBuffer.Take(messageBufferSize).ToArray();
-
-               //OK we KNOW we read a whole header at this point.
-               if(messageBufferSize >= WebSocketHeader.FullHeaderSize(message))
-               {
-                  //If we can't parse the header at this point, we have some serious issues.
-                  if (!WebSocketHeader.TryParse(message, out header))
-                     return FramePackage(DataStatus.InternalError);
-
-                  //Too much data
-                  if (header.FrameSize > MaxReceiveSize)
-                     return FramePackage(DataStatus.OversizeError);
-               }
-            }
-
-         }while(header == null || messageBufferSize < header.FrameSize);
-
-         //Oh, we have the whole message. Uhh ok then, let's make sure the header fields are correct
-         //before continuing. RSV needs to be 0 (may change later) and all client messages must be masked.
-         if (!header.Masked || header.RSV != 0)
-            return FramePackage(DataStatus.DataFormatError);
-
-         //Oh is this... a binary frame? Dawg... don't gimme that crap.
-         if (header.Opcode == HeaderOpcode.BinaryFrame)
-            return FramePackage(DataStatus.UnsupportedError);
-
-         //Initialize a frame with our newly parsed data
-         frame = new WebSocketFrame(header, messageBuffer.Take(header.FrameSize).ToArray());
-
-         //Remove the message data from the buffer
-         MessageBufferPop(header.FrameSize);
-//         messageBuffer.TruncateBeginning(header.FrameSize, messageBufferSize);
-//         messageBufferSize -= header.FrameSize;
-
-         return FramePackage(DataStatus.Complete);
-      }
-
-      //Convert any kind of socket or stream exception into a data status
-      private static DataStatus StatusForException(Exception e)
-      {
-         //We need to report the error based on what kind of exception we got.
-         if (e is ArgumentException || e is ArgumentNullException || e is ArgumentOutOfRangeException)
-            return DataStatus.InternalError;
-         else if (e is ObjectDisposedException)
-            return DataStatus.ClosedStreamError;
-         else if (e is IOException)
-            return DataStatus.ClosedSocketError;
-         else if (e is SocketException)
-            return DataStatus.SocketExceptionError;
-         else
-            return DataStatus.UnknownError;
       }
 
       /// <summary>
@@ -386,7 +232,15 @@ namespace MyWebSocket
          }
          catch(Exception e)
          {
-            return StatusForException(e);
+            //We need to report the error based on what kind of exception we got.
+            if (e is ObjectDisposedException)
+               return DataStatus.ClosedStreamError;
+            else if (e is IOException)
+               return DataStatus.ClosedSocketError;
+            else if (e is SocketException)
+               return DataStatus.SocketExceptionError;
+            else
+               return DataStatus.UnknownError;
          }
 
          try
@@ -403,35 +257,14 @@ namespace MyWebSocket
          }
          catch(Exception e)
          {
-            return StatusForException(e);
-         }
-      }
-
-      /// <summary>
-      /// Only reads as much data as possible into the internal read buffer asynchronously
-      /// </summary>
-      /// <returns>A status representing what happened during the read.</returns>
-      private async Task<DataStatus> GenericReadAsync()
-      {
-         try
-         {
-            //Console.WriteLine("Async read yo");
-            int bytesRead = await stream.ReadAsync(messageBuffer, messageBufferSize, 
-               messageBuffer.Length - messageBufferSize, cancelSource.Token);
-            //Console.WriteLine("Async read done");
-
-            if(bytesRead <= 0)
-               return DataStatus.EndOfStream;
-
-            //Acknowledge the read bytes in the buffer.
-            messageBufferSize += bytesRead;
-
-            return DataStatus.Complete;
-         }
-         catch(Exception e)
-         {
-            //Console.WriteLine("Read got rekt");
-            return StatusForException(e);
+            if (e is ArgumentException || e is ArgumentNullException || e is ArgumentOutOfRangeException)
+               return DataStatus.InternalError;
+            else if (e is IOException)
+               return DataStatus.SocketExceptionError;
+            else if (e is ObjectDisposedException)
+               return DataStatus.ClosedStreamError;
+            else
+               return DataStatus.UnknownError;
          }
       }
 
@@ -504,42 +337,6 @@ namespace MyWebSocket
             else
                return DataStatus.UnknownError;
          }
-      }
-         
-      /// <summary>
-      /// This pops one write off the queue and actually writes it to the network.
-      /// </summary>
-      public async Task<DataStatus> WriteRawAsync(byte[] bytes)
-      {
-         try
-         {
-            await stream.WriteAsync(bytes, 0, bytes.Length, cancelSource.Token);
-            return DataStatus.Complete;
-         }
-         catch(Exception e)
-         {
-            return StatusForException(e);
-         }
-      }
-
-      /// <summary>
-      /// Writes the server response handshake async.
-      /// </summary>
-      /// <returns>The handshake async.</returns>
-      /// <param name="handshake">Handshake.</param>
-      public async Task<DataStatus> WriteHandshakeAsync(HTTPServerHandshake handshake)
-      {
-         return await WriteRawAsync(System.Text.Encoding.ASCII.GetBytes(handshake.ToString()));
-      }
-
-      /// <summary>
-      /// Writes a string message to the websocket asynchronously.
-      /// </summary>
-      /// <returns>The message async.</returns>
-      /// <param name="message">Message.</param>
-      public async Task<DataStatus> WriteMessageAsync(string message)
-      {
-         return await WriteRawAsync(WebSocketFrame.GetTextFrame(System.Text.Encoding.UTF8.GetBytes(message)).GetRawBytes());
       }
 
       /// <summary>

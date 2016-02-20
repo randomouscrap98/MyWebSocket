@@ -3,10 +3,10 @@
   <PropertyGroup>
     <Configuration Condition=" '$(Configuration)' == '' ">Debug</Configuration>
     <Platform Condition=" '$(Platform)' == '' ">AnyCPU</Platform>
-    <ProjectGuid>{FCD53A5A-A53E-49E2-82E5-F1EFF2004ED4}</ProjectGuid>
+    <ProjectGuid>{53F458CC-5B57-42D4-A2F4-FBB7368E21FA}</ProjectGuid>
     <OutputType>Library</OutputType>
-    <RootNamespace>MyWebSocket</RootNamespace>
-    <AssemblyName>MyWebSocket</AssemblyName>
+    <RootNamespace>MyWebSocketAsync</RootNamespace>
+    <AssemblyName>MyWebSocketAsync</AssemblyName>
     <TargetFrameworkVersion>v4.5</TargetFrameworkVersion>
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|AnyCPU' ">
@@ -29,22 +29,25 @@
   </PropertyGroup>
   <ItemGroup>
     <Reference Include="System" />
-    <Reference Include="MyExtensions">
-      <HintPath>..\MyExtensions.dll</HintPath>
-    </Reference>
   </ItemGroup>
   <ItemGroup>
     <Compile Include="Properties\AssemblyInfo.cs" />
-    <Compile Include="WebSocketClient.cs" />
-    <Compile Include="HTTPHandshakes.cs" />
-    <Compile Include="WebSocketFrames.cs" />
-    <Compile Include="WebSocketExtras.cs" />
-    <Compile Include="WebSocketServer.cs" />
-    <Compile Include="WebSocketSpinner.cs" />
-    <Compile Include="WebSocketUser.cs" />
-    <Compile Include="BasicSpinner.cs" />
-    <Compile Include="WebSocketServerAsync.cs" />
-    <Compile Include="WebSocketConnection.cs" />
+    <Compile Include="..\MyWebSocket\HTTPHandshakes.cs">
+      <Link>HTTPHandshakes.cs</Link>
+    </Compile>
+    <Compile Include="..\MyWebSocket\WebSocketExtras.cs">
+      <Link>WebSocketExtras.cs</Link>
+    </Compile>
+    <Compile Include="..\MyWebSocket\WebSocketFrames.cs">
+      <Link>WebSocketFrames.cs</Link>
+    </Compile>
+    <Compile Include="..\MyWebSocket\WebSocketStatuses.cs">
+      <Link>WebSocketStatuses.cs</Link>
+    </Compile>
+    <Compile Include="..\MyWebSocket\WebSocketUser.cs">
+      <Link>WebSocketUser.cs</Link>
+    </Compile>
+    <Compile Include="WebSocketClientAsync.cs" />
   </ItemGroup>
   <Import Project="$(MSBuildBinPath)\Microsoft.CSharp.targets" />
 </Project>

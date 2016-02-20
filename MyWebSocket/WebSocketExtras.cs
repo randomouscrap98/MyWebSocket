@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Net.NetworkInformation;
 using System.Net.Sockets;
+using MyExtensions.Logging;
 
 namespace MyWebSocket
 {
@@ -34,6 +35,37 @@ namespace MyWebSocket
       Error
    }
 
+   /// <summary>
+   /// A class which allows users to create a settings object. This helps 
+   /// when you inherit from the WebSocketServer class.
+   /// </summary>
+   public class WebSocketSettings
+   {
+      public readonly int Port;
+      public readonly string Service;
+      public readonly Func<WebSocketUser> Generator;
+      public readonly Logger LogProvider = Logger.DefaultLogger;
+      public TimeSpan ShutdownTimeout = TimeSpan.FromSeconds(5);
+      public TimeSpan PingInterval = TimeSpan.FromSeconds(10);
+      public TimeSpan ReadWriteTimeout = TimeSpan.FromSeconds(10);
+      public TimeSpan HandshakeTimeout = TimeSpan.FromSeconds(10);
+      public TimeSpan AcceptPollInterval = TimeSpan.FromMilliseconds(100);
+      public TimeSpan DataPollInterval = TimeSpan.FromMilliseconds(100);
+      public int ReceiveBufferSize = 2048;
+      public int SendBufferSize = 16384;
+      public int MaxReceiveSize = 16384;
+
+      public WebSocketSettings(int port, string service, Func<WebSocketUser> generator, Logger logger = null)
+      {
+         Port = port;
+         Service = service;
+         Generator = generator;
+
+         if(logger != null)
+            LogProvider = logger;
+      }
+   }
+
    public static class WebSocketHelper
    {
       public static List<string> Explode(string text, bool trim = true)
@@ -42,9 +74,12 @@ namespace MyWebSocket
             x => trim ? x.Trim() : x).ToList();
       }
 
-      public static void TruncateBeginning<T>(this T[] array, int start)
+      public static void TruncateBeginning<T>(this T[] array, int start, int length = 0)
       {
-         for (int i = 0; i < array.Count() - start; i++)
+         if (length <= 0)
+            length = array.Count();
+         
+         for (int i = 0; i < length - start; i++)
             array[i] = array[start + i];
       }
 
@@ -60,6 +95,20 @@ namespace MyWebSocket
          }
 
          return result;
+      }
+
+      public static long GCD(long a, long b)
+      {
+         long t = 0;
+
+         while (b != 0)
+         {
+            t = b;
+            b = a % b;
+            a = t;
+         }
+
+         return a;
       }
 
       public static TcpState GetState(this TcpClient tcpClient)

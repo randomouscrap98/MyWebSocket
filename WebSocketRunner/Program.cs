@@ -4,6 +4,7 @@ using System.Net;
 using System.Net.Sockets;
 using System.Threading;
 using MyExtensions.Logging;
+using System.Threading.Tasks;
 
 namespace WebSocketRunner
 {
@@ -13,23 +14,36 @@ namespace WebSocketRunner
       {
          Logger logger = new Logger(100, "", LogLevel.SuperDebug);
 
-         WebSocketServer server = new WebSocketServer(
+         WebSocketServerAsync server = new WebSocketServerAsync(
             new WebSocketSettings(45695, "chat", () => { return new EchoUser(); }, logger));
 
-         if (!server.Start())
-         {
-            Console.WriteLine("Cannot start server!");
-            return;
-         }
+         Task serverWaitable = server.StartAsync();
 
          Console.WriteLine("Press any key to quit");
          Console.Read();
 
-         if(!server.Stop())
-         {
-            Console.WriteLine("Cannot stop server!");
-            return;
-         }
+         Console.WriteLine("*Trying to stop server");
+         server.Stop();
+         Console.WriteLine("*Server stopped. Now waiting on async context");
+         serverWaitable.Wait(server.Settings.ShutdownTimeout);
+
+//         WebSocketServer server = new WebSocketServer(
+//            new WebSocketSettings(45695, "chat", () => { return new EchoUser(); }, logger));
+//
+//         if (!server.Start())
+//         {
+//            Console.WriteLine("Cannot start server!");
+//            return;
+//         }
+//
+//         Console.WriteLine("Press any key to quit");
+//         Console.Read();
+//
+//         if(!server.Stop())
+//         {
+//            Console.WriteLine("Cannot stop server!");
+//            return;
+//         }
       }
    }
 
