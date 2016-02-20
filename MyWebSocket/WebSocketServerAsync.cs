@@ -47,7 +47,7 @@ namespace MyWebSocket
 
    public class WebSocketServerAsync : IDisposable
    {
-      public const string Version = "RA_1.0.0";
+      public const string Version = "RA_1.0.2";
 
       private WebSocketSettings settings;
       private List<WebSocketConnectionAsync> connections;
@@ -79,7 +79,6 @@ namespace MyWebSocket
          Log("Server will check connections every " + 
             StringExtensions.LargestTime(TimeSpan.FromMilliseconds(updateTimer.Interval)), 
             LogLevel.Debug);
-         //updateTimer
       }
 
       private void ServerUpdate(Object sender, System.Timers.ElapsedEventArgs e)
@@ -106,7 +105,6 @@ namespace MyWebSocket
                {
                   connection.Log("Sending heartbeat", LogLevel.SuperDebug);
                   connection.AddWrite(connection.Client.WriteRawAsync(WebSocketFrame.GetPongFrame().GetRawBytes()));
-                  //connection.Client.QueueRaw(WebSocketFrame.GetPongFrame().GetRawBytes());
                   connection.LastTest = DateTime.Now;
                }
             }
@@ -128,10 +126,6 @@ namespace MyWebSocket
          {
             foreach (WebSocketConnectionAsync client in new List<WebSocketConnectionAsync>(connections))
                RemoveConnection(client);
-//            {
-//               client.Item1.Dispose();
-//               client.Item2.Wait(settings.ShutdownTimeout);
-//            }
 
             connections.Clear();
             connections = null;
@@ -177,19 +171,7 @@ namespace MyWebSocket
       {
          settings.LogProvider.LogGeneral(message, level, "WebSocketServer");
       }
-
-      /// <summary>
-      /// Completely obliterate a spinner. It will just no longer exist. Use this when
-      /// you need absolute destruction.
-      /// </summary>
-      /// <param name="spinner">Spinner.</param>
-//      private void ObliterateSpinner(WebSocketSpinner spinner)
-//      {
-//         Log("Forcefully obliterating spinner: " + spinner.ID, LogLevel.Debug);
-//         spinner.Stop();
-//         RemoveSpinner(spinner);
-//      }
-
+         
       /// <summary>
       /// Remove and cleanup the given spinner
       /// </summary>
@@ -228,7 +210,6 @@ namespace MyWebSocket
          {
             if(connection.Client != null)
                connection.AddWrite(connection.Client.WriteRawAsync(WebSocketFrame.GetCloseFrame().GetRawBytes()));
-            //connection.Client.QueueRaw(WebSocketFrame.GetCloseFrame().GetRawBytes());
          });
 
          string error = "";
@@ -244,16 +225,7 @@ namespace MyWebSocket
             //In the beginning, we wait for a handshake dawg.
             if (connection.State == WebSocketState.Startup)
             {
-//               //Oof, you're taking too long!
-//               if ((DateTime.Now - lastTest) > settings.HandshakeTimeout)
-//               {
-//                  Log("Handshake timeout", LogLevel.Warning);
-//                  break;
-//               }
-
-               connection.Log("Reading handshake...");
                Tuple<DataStatus, HTTPClientHandshake, string> handshakeResult = await connection.Client.ReadHandshakeAsync();
-               connection.Log("Handshake read!");
                dataStatus = handshakeResult.Item1;
                readHandshake = handshakeResult.Item2;
                error = handshakeResult.Item3;
@@ -264,7 +236,6 @@ namespace MyWebSocket
                   if (readHandshake.Service != settings.Service)
                   {
                      connection.AddWrite(connection.Client.WriteHandshakeAsync(HTTPServerHandshake.GetBadRequest()));
-                     //connection.Client.QueueHandshakeMessage(HTTPServerHandshake.GetBadRequest());
                      break;
                   }
 
@@ -273,15 +244,13 @@ namespace MyWebSocket
                   response.AcceptedProtocols.Clear();
                   response.AcceptedExtensions.Clear();
 
-                  //Client.QueueHandshakeMessage(HTTPServerHandshake.GetBadRequest());
                   connection.AddWrite(connection.Client.WriteHandshakeAsync(response));
-                  //connection.Client.QueueHandshakeMessage(response);
                   connection.State = WebSocketState.Connected;
                   connection.LastTest = DateTime.Now;
                   connection.Log("WebSocket handshake complete", LogLevel.Debug);
                }
                //Hmm, if it's not complete and we're not waiting, it's an error. Close the connection?
-               else //if (dataStatus != DataStatus.WaitingOnData)
+               else
                {
                   connection.LogStatus(dataStatus, "Handshake");
 
@@ -292,21 +261,12 @@ namespace MyWebSocket
                   //let's tell them why they suck!
                   if (dataStatus == DataStatus.DataFormatError)
                      connection.AddWrite(connection.Client.WriteHandshakeAsync(HTTPServerHandshake.GetBadRequest()));
-                     //connection.Client.QueueHandshakeMessage(HTTPServerHandshake.GetBadRequest());
 
                   break;
                }
             }
             else if (connection.State == WebSocketState.Connected)
             {
-               //Ping if we're already in a connected state
-//               if ((DateTime.Now - lastTest) > settings.PingInterval)
-//               {
-//                  Log("Sending heartbeat", LogLevel.SuperDebug);
-//                  connection.Client.QueueRaw(WebSocketFrame.GetPongFrame().GetRawBytes());
-//                  lastTest = DateTime.Now;
-//               }
-
                Tuple<DataStatus, WebSocketFrame> frameResult = await connection.Client.ReadFrameAsync();
                dataStatus = frameResult.Item1;
                readFrame = frameResult.Item2;
@@ -319,38 +279,23 @@ namespace MyWebSocket
 
                   if (tempBytes != null)
                      connection.AddWrite(connection.Client.WriteRawAsync(tempBytes));
-                     //connection.Client.QueueRaw(tempBytes);
                   if (!continueConnection)
                      break;
                   if(!string.IsNullOrEmpty(frameMessage))
                      await Task.Run(() => connection.User.ReceivedMessage(frameMessage));
-                     //User.ReceivedMessage(message);
                }
                //Oh something went wrong. That's OK I guess.
-               else //if (dataStatus != DataStatus.WaitingOnData)
+               else
                {
                   connection.LogStatus(dataStatus, "Read");
                   break;
                }
             }
-
-            //dataStatus = connection.Client.DequeueWrite();
-
-//            if (dataStatus != DataStatus.Complete && dataStatus != DataStatus.WaitingOnData)
-//            {
-//               connection.LogStatus(dataStatus, "Write");
-//               break;
-//            }
-
-            //Thread.Sleep(100);
          }
 
          //Now that we're ending, try to dump out a bit of the write queue.
          connection.Log("Connection finished.", LogLevel.Debug);
-         //connection.Client.DumpWriteQueue(settings.ShutdownTimeout);
-
          connection.User.ClosedConnection();
-
          RemoveConnection(connection, false);
       }
 
@@ -393,21 +338,11 @@ namespace MyWebSocket
                WebSocketConnectionAsync connection = 
                   new WebSocketConnectionAsync(webClient, GenerateNewUser(), settings.LogProvider);
                connection.Awaitable = ProcessConnection(connection);
-               //connection.Awaitable.ContinueWith(x => RemoveConnection(connection));
-
-//               WebSocketSpinner newSpinner = new WebSocketSpinner(this, webClient);
-//               newSpinner.OnComplete += RemoveSpinner;
 
                lock (connectionLock)
                {
                   connections.Add(connection);
-                  //connections.Add(Tuple.Create(connection, awaitable));
                }
-//               if (!newSpinner.Start())
-//               {
-//                  Log("Couldn't startup client spinner!", LogLevel.Error);
-//                  ObliterateSpinner(newSpinner);
-//               }
             }
             catch(Exception e)
             {
@@ -417,15 +352,8 @@ namespace MyWebSocket
                   Log("Encountered exception while accepting: " + e, LogLevel.Error);
             }
          }
-//
-//         Log("Attempting to stop server", LogLevel.Debug);
-//
-//         server.Stop();
-//
-//         foreach (WebSocketSpinner spinner in new List<WebSocketSpinner>(connectionSpinners))
-//            ObliterateSpinner(spinner);
-//
-//         Log("Server shut down");
+
+         running = false;
       }
 
       public void Stop()
@@ -437,8 +365,6 @@ namespace MyWebSocket
 
          foreach (WebSocketConnectionAsync connection in new List<WebSocketConnectionAsync> (connections))
             RemoveConnection(connection);
-         
-            //ObliterateSpinner(spinner);
 
          Log("Server shut down");
       }

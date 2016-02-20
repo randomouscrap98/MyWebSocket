@@ -18,15 +18,6 @@ namespace MyWebSocket
       private WebSocketConnection connection = null;
       private WebSocketSettings settings = null;
 
-      //public readonly WebSocketUser User;
-
-//      private byte[] fragmentBuffer;
-//      private int fragmentBufferSize = 0;
-//
-//      public readonly long ID;
-//      private static long NextID = 1;
-//      private static readonly object idLock = new object();
-
       public WebSocketSpinner(WebSocketClient supportingClient, WebSocketUser newUser, WebSocketSettings settings) 
          : base("WebsocketSpinner", settings.ShutdownTimeout)
       {
@@ -43,37 +34,11 @@ namespace MyWebSocket
          {
             connection.Client.QueueRaw(WebSocketFrame.GetCloseFrame().GetRawBytes());
          });
-
-//         Client = supportingClient;
-//         Server = managingServer;
-//         ID = GenerateID();
-//
-//         User = Server.Settings.Generator();
-//         User.SetSendPlaceholder((message) =>
-//         {
-//            if(Client != null)
-//               Client.QueueMessage(message);
-//         });
-//         User.SetGetAllUsersPlaceholder(() =>
-//         {
-//            return Server.ConnectedUsers();
-//         });
-//         User.SetBroadcastPlaceholder((message) =>
-//         {
-//            Server.GeneralBroadcast(message);
-//         });
-//         User.SetCloseSelfPlaceholder(() =>
-//         {
-//            CleanClose();
-//         });
-//
-//         fragmentBuffer = new byte[Client.MaxReceiveSize];
       }
 
       public override void Log(string message, LogLevel level = LogLevel.Normal)
       {
          connection.Log(message, level);
-         //Server.LogGeneral(message, level, SpinnerName + ID);
       }
 
       public WebSocketUser User
@@ -87,7 +52,7 @@ namespace MyWebSocket
       }
 
       /// <summary>
-      /// The only unmanaged resource here is the client, so get rid of them.
+      /// The only unmanaged resource here is the connection, so get rid of them.
       /// </summary>
       /// <remarks>Call <see cref="Dispose"/> when you are finished using the <see cref="MyWebSocket.WebSocketSpinner"/>. The
       /// <see cref="Dispose"/> method leaves the <see cref="MyWebSocket.WebSocketSpinner"/> in an unusable state. After
@@ -101,11 +66,6 @@ namespace MyWebSocket
             connection.Dispose();
             connection = null;
          }
-//         if (Client != null)
-//         {
-//            Client.Dispose();
-//            Client = null;
-//         }
       }
 
       public void LogStatus(DataStatus status, string caller)
@@ -125,7 +85,6 @@ namespace MyWebSocket
          DataStatus dataStatus;
          WebSocketFrame readFrame;
          connection.State = WebSocketState.Startup;
-         //DateTime lastTest = DateTime.Now;
          byte[] tempBytes;
 
          while (!shouldStop)
@@ -157,7 +116,6 @@ namespace MyWebSocket
                   response.AcceptedProtocols.Clear();
                   response.AcceptedExtensions.Clear();
 
-                  //Client.QueueHandshakeMessage(HTTPServerHandshake.GetBadRequest());
                   connection.Client.QueueHandshakeMessage(response);
                   connection.State = WebSocketState.Connected;
                   connection.LastTest = DateTime.Now;
@@ -202,42 +160,6 @@ namespace MyWebSocket
                      break;
                   if(!string.IsNullOrEmpty(message))
                      User.ReceivedMessage(message);
-
-                  //If it's a message frame or PART of a message frame, we should add the payload to the 
-                  //fragment buffer. The fragment buffer will be complete if this is a fin frame (see next statement)
-//                  if (readFrame.Header.Opcode == HeaderOpcode.ContinueFrame || 
-//                      readFrame.Header.Opcode == HeaderOpcode.TextFrame)
-//                  {
-//                     if (readFrame.Header.Opcode == HeaderOpcode.ContinueFrame)
-//                        Log("Received fragmented frame.", LogLevel.SuperDebug);
-//                     
-//                     Array.Copy(readFrame.PayloadData, 0, fragmentBuffer, fragmentBufferSize, readFrame.Header.PayloadSize);
-//                     fragmentBufferSize += readFrame.Header.PayloadSize;
-//                  }
-//
-//                  //Only convert fragment buffer into message if this is the final frame and it's a text frame
-//                  if (readFrame.Header.Fin && readFrame.Header.Opcode == HeaderOpcode.TextFrame)
-//                  {
-//                     string message = System.Text.Encoding.UTF8.GetString(fragmentBuffer, 0, fragmentBufferSize);
-//                     fragmentBufferSize = 0;
-//         
-//                     Log("Received message: " + message, LogLevel.SuperDebug);
-//                     User.ReceivedMessage(message);
-//                  }
-                  //If user is pinging us, pong them back
-//                  else if (readFrame.Header.Opcode == HeaderOpcode.PingFrame)
-//                  {
-//                     Log("Client ping. Sending pong", LogLevel.SuperDebug);
-//                     connection.Client.QueueRaw(WebSocketFrame.GetPongFrame().GetRawBytes());
-//                  }
-//                  //Oh they're disconnecting? OK then, we need to finish up. Do NOT send more data.
-//                  else if (readFrame.Header.Opcode == HeaderOpcode.CloseConnectionFrame)
-//                  {
-//                     Log("Client is disconnecting: " + readFrame.CloseCode, LogLevel.Debug);
-//                     readFrame.Header.Masked = false;
-//                     connection.Client.QueueRaw(readFrame.GetRawBytes());
-//                     break;
-//                  }
                }
                //Oh something went wrong. That's OK I guess.
                else if (dataStatus != DataStatus.WaitingOnData)
@@ -264,14 +186,6 @@ namespace MyWebSocket
 
          connection.User.ClosedConnection();
       }
-
-//      private static long GenerateID()
-//      {
-//         lock (idLock)
-//         {
-//            return NextID++;
-//         }
-//      }
    }
 }
 
