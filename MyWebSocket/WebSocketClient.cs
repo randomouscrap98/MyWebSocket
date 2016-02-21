@@ -293,24 +293,22 @@ namespace MyWebSocket
       public async Task<Tuple<DataStatus, WebSocketFrame>> ReadFrameAsync()
       {
          WebSocketFrame frame = new WebSocketFrame();
-         DataStatus readStatus = DataStatus.UnknownError;
+         DataStatus readStatus = DataStatus.Complete;
          WebSocketHeader header = null;
          byte[] message = null;
 
          Func<DataStatus, Tuple<DataStatus,WebSocketFrame>> FramePackage = x => Tuple.Create(x, frame);
+         Func<bool> NoFrameInBuffer = () => (header == null || messageBufferSize < header.FrameSize);
 
          //Continue reading until we get a full frame. If the result is ever NOT complete 
          //(as in no read was performed), we should get the hell outta here
          do
          {
-            readStatus = await GenericReadAsync();
-
-            //If there was an error (anything other than "completion" or waiting), return the error.
-            if (readStatus != DataStatus.Complete)
-               return FramePackage(readStatus);
+            //Note: we START with parsing the header just in case we have a leftover frame in the buffer.
+            //We don't want to read more messages until all frames in the buffer have been parsed.
 
             //Oh good, there's at least enough to know the header size.
-            if(messageBufferSize > 2)
+            if(messageBufferSize >= 2)
             {
                message = messageBuffer.Take(messageBufferSize).ToArray();
 
@@ -327,7 +325,15 @@ namespace MyWebSocket
                }
             }
 
-         }while(header == null || messageBufferSize < header.FrameSize);
+            //Only read if there's no full frame in the buffer.
+            if(NoFrameInBuffer())
+               readStatus = await GenericReadAsync();
+
+            //If there was an error (anything other than "completion" or waiting), return the error.
+            if (readStatus != DataStatus.Complete)
+               return FramePackage(readStatus);
+            
+         }while(NoFrameInBuffer());
 
          //Oh, we have the whole message. Uhh ok then, let's make sure the header fields are correct
          //before continuing. RSV needs to be 0 (may change later) and all client messages must be masked.
@@ -343,8 +349,6 @@ namespace MyWebSocket
 
          //Remove the message data from the buffer
          MessageBufferPop(header.FrameSize);
-//         messageBuffer.TruncateBeginning(header.FrameSize, messageBufferSize);
-//         messageBufferSize -= header.FrameSize;
 
          return FramePackage(DataStatus.Complete);
       }
