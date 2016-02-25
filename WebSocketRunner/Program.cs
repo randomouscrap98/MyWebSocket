@@ -12,7 +12,16 @@ namespace WebSocketRunner
    {
       public static void Main(string[] args)
       {
+         Console.WriteLine("DOING SOMEWTHING");
          Logger logger = new Logger(100, "", LogLevel.SuperDebug);
+
+//         byte[] thing = new byte[0];
+//         Dude whatever = new Dude();
+//         //MyExtensions.MySerialize.SaveObject<Dude>("whatever.txt", whatever);
+//         Console.ReadKey();
+//         MyExtensions.MySerialize.LoadObject<Dude>("whatever.txt", out whatever);
+//         Console.WriteLine("Your string: " + whatever);
+//         Console.ReadKey();
 
          WebSocketServerAsync server = new WebSocketServerAsync(
             new WebSocketSettings(45695, "chat", () => { return new EchoUser(); }, logger));
@@ -45,6 +54,10 @@ namespace WebSocketRunner
 //            return;
 //         }
       }
+   }
+   public class Dude
+   {
+      public string whatever;
    }
 
    public class EchoUser : WebSocketUser

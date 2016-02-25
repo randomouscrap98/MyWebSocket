@@ -5,8 +5,6 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MyWebSocket", "MyWebSocket\
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "WebSocketRunner", "WebSocketRunner\WebSocketRunner.csproj", "{296EACB4-5B9B-429D-863E-52A8C3B72350}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MyWebSocketAsync", "MyWebSocketAsync\MyWebSocketAsync.csproj", "{53F458CC-5B57-42D4-A2F4-FBB7368E21FA}"
-EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -17,10 +15,6 @@ Global
 		{296EACB4-5B9B-429D-863E-52A8C3B72350}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{296EACB4-5B9B-429D-863E-52A8C3B72350}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{296EACB4-5B9B-429D-863E-52A8C3B72350}.Release|Any CPU.Build.0 = Release|Any CPU
-		{53F458CC-5B57-42D4-A2F4-FBB7368E21FA}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
-		{53F458CC-5B57-42D4-A2F4-FBB7368E21FA}.Debug|Any CPU.Build.0 = Debug|Any CPU
-		{53F458CC-5B57-42D4-A2F4-FBB7368E21FA}.Release|Any CPU.ActiveCfg = Release|Any CPU
-		{53F458CC-5B57-42D4-A2F4-FBB7368E21FA}.Release|Any CPU.Build.0 = Release|Any CPU
 		{FCD53A5A-A53E-49E2-82E5-F1EFF2004ED4}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
 		{FCD53A5A-A53E-49E2-82E5-F1EFF2004ED4}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{FCD53A5A-A53E-49E2-82E5-F1EFF2004ED4}.Release|Any CPU.ActiveCfg = Release|Any CPU
