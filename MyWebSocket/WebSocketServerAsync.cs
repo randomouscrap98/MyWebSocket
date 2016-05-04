@@ -47,7 +47,7 @@ namespace MyWebSocket
 
    public class WebSocketServerAsync : IDisposable
    {
-      public const string Version = "RA_1.0.3";
+      public const string Version = "RA_1.0.4";
 
       private WebSocketSettings settings;
       private List<WebSocketConnectionAsync> connections;

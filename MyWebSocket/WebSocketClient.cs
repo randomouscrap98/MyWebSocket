@@ -419,6 +419,16 @@ namespace MyWebSocket
       {
          try
          {
+            //This will HOPEFULLY resolve issues where the stream is in the middle of reading
+            //but it never returns. Maybe...
+            while(!stream.DataAvailable)
+            {
+               await Task.Delay(100);
+
+               if(cancelSource.IsCancellationRequested)
+                  return DataStatus.ClosedStreamError;
+            }
+
             //Console.WriteLine("Async read yo");
             int bytesRead = await stream.ReadAsync(messageBuffer, messageBufferSize, 
                messageBuffer.Length - messageBufferSize, cancelSource.Token);
