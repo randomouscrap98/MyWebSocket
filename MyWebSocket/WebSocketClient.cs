@@ -24,6 +24,7 @@ namespace MyWebSocket
       InternalError,
       UnsupportedError,
       OversizeError,
+      CancellationRequest,
       UnknownError
    }
 
@@ -426,7 +427,7 @@ namespace MyWebSocket
                await Task.Delay(100);
 
                if(cancelSource.IsCancellationRequested)
-                  return DataStatus.ClosedStreamError;
+                  return DataStatus.CancellationRequest;
             }
 
             //Console.WriteLine("Async read yo");

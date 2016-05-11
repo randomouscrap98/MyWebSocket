@@ -99,6 +99,8 @@ namespace MyWebSocket
             Slog("An unknown error occurred in the WebSocket library!", LogLevel.Error);
          else if (status == DataStatus.UnsupportedError)
             Slog("Tried to use an unsupported WebSocket feature!", LogLevel.Warning);
+         else if (status == DataStatus.CancellationRequest)
+            Slog("Connection was cancelled on request", LogLevel.Warning);
       }
 
       /// <summary>

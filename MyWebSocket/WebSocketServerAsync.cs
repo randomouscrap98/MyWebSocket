@@ -47,7 +47,7 @@ namespace MyWebSocket
 
    public class WebSocketServerAsync : IDisposable
    {
-      public const string Version = "RA_1.0.4";
+      public const string Version = "RA_1.0.6";
 
       private WebSocketSettings settings;
       private List<WebSocketConnectionAsync> connections;
@@ -83,9 +83,11 @@ namespace MyWebSocket
 
       private void ServerUpdate(Object sender, System.Timers.ElapsedEventArgs e)
       {
+         List<WebSocketConnectionAsync> removals = new List<WebSocketConnectionAsync>();
+
          lock (connectionLock)
          {
-            List<WebSocketConnectionAsync> removals = new List<WebSocketConnectionAsync>(); // connections.Where(x => x.PullCompletedWrites().Any(y => y != DataStatus.Complete)).ToList();
+            // connections.Where(x => x.PullCompletedWrites().Any(y => y != DataStatus.Complete)).ToList();
 
             foreach (WebSocketConnectionAsync connection in connections)
             {
@@ -94,24 +96,26 @@ namespace MyWebSocket
                   removals.Add(connection);
                }
                //Oof, you're taking too long to finish the handshake!
-               else if (connection.State == WebSocketState.Startup && 
-                  (DateTime.Now - connection.LastTest) > settings.HandshakeTimeout)
+               else if (connection.State == WebSocketState.Startup &&
+                        (DateTime.Now - connection.LastTest) > settings.HandshakeTimeout)
                {
                   connection.Log("Handshake timeout", LogLevel.Warning);
                   removals.Add(connection);
                }
-               else if (connection.State == WebSocketState.Connected && 
-                  (DateTime.Now - connection.LastTest) > settings.PingInterval)
+               else if (connection.State == WebSocketState.Connected &&
+                        (DateTime.Now - connection.LastTest) > settings.PingInterval)
                {
                   connection.Log("Sending heartbeat", LogLevel.SuperDebug);
                   connection.AddWrite(connection.Client.WriteRawAsync(WebSocketFrame.GetPongFrame().GetRawBytes()));
                   connection.LastTest = DateTime.Now;
                }
             }
-
-            foreach (WebSocketConnectionAsync connection in removals.Distinct())
-               RemoveConnection(connection);
          }
+
+         foreach (WebSocketConnectionAsync connection in removals.Distinct())
+            RemoveConnection(connection);
+
+         Log("Server update timer complete", LogLevel.SuperDebug);
       }
 
       public void Dispose()
