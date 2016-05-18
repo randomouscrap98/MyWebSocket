@@ -15,6 +15,9 @@ namespace MyWebSocket
       public readonly List<Task<DataStatus>> PendingWrites = new List<Task<DataStatus>>();
       public readonly Object writeLock = new object();
 
+      private DateTime CloseRequestedTimestamp = new DateTime(0);
+      private Task<DataStatus> CloseTask = null;
+
       public WebSocketConnectionAsync(WebSocketClient client, WebSocketUser user, Logger logger) 
          : base(client, user, logger)
       {
@@ -43,11 +46,40 @@ namespace MyWebSocket
             PendingWrites.Add(write);
          }
       }
+
+        public void AddClose(Task<DataStatus> closeTask)
+        {
+            lock (writeLock)
+            {
+                if (CloseRequested)
+                    return;
+
+                AddWrite(closeTask);
+                CloseTask = closeTask;
+                CloseRequestedTimestamp = DateTime.Now;
+            }
+        }
+
+        public bool CloseRequested
+        {
+            get { return CloseTask != null; }
+        }
+
+        public bool IsCloseCompleted
+        {
+            get { return CloseRequested && CloseTask.IsCompleted; }
+        }
+
+        public TimeSpan TimeSinceClosed
+        {
+            get { return DateTime.Now - CloseRequestedTimestamp;  }
+        }
+
    }
 
    public class WebSocketServerAsync : IDisposable
    {
-      public const string Version = "RA_1.0.6";
+      public const string Version = "RA_1.0.7";
 
       private WebSocketSettings settings;
       private List<WebSocketConnectionAsync> connections;
@@ -91,7 +123,8 @@ namespace MyWebSocket
 
             foreach (WebSocketConnectionAsync connection in connections)
             {
-               if (connection.PullCompletedWrites().Any(x => x != DataStatus.Complete))
+               if (connection.PullCompletedWrites().Any(x => x != DataStatus.Complete) ||
+                   (connection.CloseRequested && (connection.IsCloseCompleted || connection.TimeSinceClosed > settings.ReadWriteTimeout)))
                {
                   removals.Add(connection);
                }
@@ -212,8 +245,11 @@ namespace MyWebSocket
          });
          connection.User.SetCloseSelfPlaceholder(() =>
          {
-            if(connection.Client != null)
-               connection.AddWrite(connection.Client.WriteRawAsync(WebSocketFrame.GetCloseFrame().GetRawBytes()));
+             if (connection.Client != null)
+             {
+                 connection.AddClose(connection.Client.WriteRawAsync(WebSocketFrame.GetCloseFrame().GetRawBytes()));
+                 connection.Log("This connection was forced to close.", LogLevel.Warning);
+             }
          });
 
          string error = "";
