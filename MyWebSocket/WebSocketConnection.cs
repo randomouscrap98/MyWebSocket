@@ -125,7 +125,7 @@ namespace MyWebSocket
          }
 
          //Only convert fragment buffer into message if this is the final frame and it's a text frame
-         if (readFrame.Header.Fin && readFrame.Header.Opcode == HeaderOpcode.TextFrame)
+         if (readFrame.Header.Fin && (readFrame.Header.Opcode == HeaderOpcode.TextFrame || readFrame.Header.Opcode == HeaderOpcode.ContinueFrame))
          {
             message = System.Text.Encoding.UTF8.GetString(fragmentBuffer, 0, fragmentBufferSize);
             fragmentBufferSize = 0;

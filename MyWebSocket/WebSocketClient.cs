@@ -308,6 +308,8 @@ namespace MyWebSocket
             //Note: we START with parsing the header just in case we have a leftover frame in the buffer.
             //We don't want to read more messages until all frames in the buffer have been parsed.
 
+            //Console.WriteLine("Trying to read whole frame. Buffer: " + messageBufferSize);
+
             //Oh good, there's at least enough to know the header size.
             if(messageBufferSize >= 2)
             {
@@ -325,7 +327,7 @@ namespace MyWebSocket
                      return FramePackage(DataStatus.OversizeError);
                }
             }
-
+               
             //Only read if there's no full frame in the buffer.
             if(NoFrameInBuffer())
                readStatus = await GenericReadAsync();
@@ -418,22 +420,29 @@ namespace MyWebSocket
       /// <returns>A status representing what happened during the read.</returns>
       private async Task<DataStatus> GenericReadAsync()
       {
+         //Console.WriteLine("About to read more data. Buffer leftover: " + (messageBuffer.Length - messageBufferSize));
          try
          {
             //This will HOPEFULLY resolve issues where the stream is in the middle of reading
             //but it never returns. Maybe...
             while(!stream.DataAvailable)
             {
+               //Console.WriteLine("Waiting (delaying)");
                await Task.Delay(100);
 
                if(cancelSource.IsCancellationRequested)
                   return DataStatus.CancellationRequest;
             }
 
+            /*int bytesRead = await Task.Factory.StartNew(() => stream.Read(messageBuffer, messageBufferSize, 
+               messageBuffer.Length - messageBufferSize));*/
+            
             //Console.WriteLine("Async read yo");
             int bytesRead = await stream.ReadAsync(messageBuffer, messageBufferSize, 
                messageBuffer.Length - messageBufferSize, cancelSource.Token);
             //Console.WriteLine("Async read done");
+
+            //Console.WriteLine("Just finished reading data");
 
             if(bytesRead <= 0)
                return DataStatus.EndOfStream;
