@@ -79,7 +79,7 @@ namespace MyWebSocket
 
    public class WebSocketServerAsync : IDisposable
    {
-      public const string Version = "RA_1.0.7";
+      public const string Version = "RA_1.0.8";
 
       private WebSocketSettings settings;
       private List<WebSocketConnectionAsync> connections;
